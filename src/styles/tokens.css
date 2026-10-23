@@ -1,0 +1,28 @@
+/**
+ * VÉRRO Digital Art Gallery — Canonical Design Tokens
+ * Single Source of Truth for Color Palette and Spatial Scale
+ */
+
+:root {
+  /* Level 1: Canvas Base */
+  --color-ivory: #F2EBDD;
+
+  /* Level 2: Secondary Content Surfaces & Plaques */
+  --color-parchment: #E8DDC9;
+
+  /* Level 3: Primary Typography Ink & Dark Editorial Blocks */
+  --color-charcoal: #171717;
+
+  /* Level 4: Precious & Archival Accents */
+  --color-gold: #B08A4A;
+  --color-navy: #173A5E;
+  --color-oxblood: #641F23;
+
+  /* Semantic Aliases */
+  --color-canvas: var(--color-ivory);
+  --color-surface: var(--color-parchment);
+  --color-ink: var(--color-charcoal);
+  --color-ink-muted: rgba(23, 23, 23, 0.65);
+  --color-hairline: rgba(23, 23, 23, 0.15);
+  --color-hairline-dark: rgba(255, 255, 255, 0.10);
+}

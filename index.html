@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <meta name="description" content="Digital fine-art wallpapers for Mac + iPhone. Fine-art brushstrokes, archival gold leaf, and uncompromising typographic discipline."/>
+  <meta name="shell-type" content="web_standard"/>
+  <title>VÉRRO — Designed for the Unordinary | Vol. 01</title>
+
+  <!-- Typography: Bodoni Moda (Display) + Space Grotesk (Body) + IBM Plex Mono (Archival) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin=""/>
+  <link href="https://fonts.googleapis.com/css2?family=Bodoni+Moda:ital,opsz,wght@0,6..96,400;0,6..96,500;1,6..96,400;1,6..96,500&amp;family=IBM+Plex+Mono:wght@400;500&amp;family=Space+Grotesk:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+
+  <!-- Preload critical hero lifestyle asset -->
+  <link rel="preload" as="image" href="public/images/hero/hero-lifestyle.webp" type="image/webp"/>
+
+  <!-- Modular Design System Stylesheets -->
+  <link rel="stylesheet" href="src/styles/tokens.css"/>
+  <link rel="stylesheet" href="src/styles/globals.css"/>
+
+  <!-- Tailwind CSS Engine -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          colors: {
+            "ivory": "#F2EBDD",
+            "parchment": "#E8DDC9",
+            "charcoal": "#171717",
+            "gold": "#B08A4A",
+            "navy": "#173A5E",
+            "oxblood": "#641F23",
+            "canvas": "#F2EBDD",
+            "surface": "#E8DDC9"
+          },
+          borderRadius: {
+            "none": "0px",
+            "DEFAULT": "0px",
+            "sm": "0px",
+            "md": "0px",
+            "lg": "0px",
+            "xl": "0px",
+            "2xl": "0px",
+            "3xl": "0px",
+            "full": "9999px"
+          },
+          boxShadow: {
+            "none": "none",
+            "sm": "none",
+            "DEFAULT": "none",
+            "md": "none",
+            "lg": "none",
+            "xl": "none",
+            "2xl": "none"
+          },
+          spacing: {
+            "space-xs": "0.25rem",
+            "space-sm": "0.5rem",
+            "space-md": "1rem",
+            "space-lg": "2rem",
+            "space-xl": "3.5rem",
+            "space-2xl": "6rem",
+            "gutter": "2rem",
+            "margin": "4rem",
+            "gutter-mobile": "1rem",
+            "margin-mobile": "1.5rem"
+          },
+          fontFamily: {
+            "bodoni": ["'Bodoni Moda'", "Georgia", "serif"],
+            "space": ["'Space Grotesk'", "sans-serif"],
+            "mono-archival": ["'IBM Plex Mono'", "monospace"],
+            "display-xl": ["'Bodoni Moda'", "Georgia", "serif"],
+            "headline-lg": ["'Bodoni Moda'", "Georgia", "serif"],
+            "headline-md": ["'Bodoni Moda'", "Georgia", "serif"],
+            "headline-sm": ["'Bodoni Moda'", "Georgia", "serif"],
+            "body-lg": ["'Space Grotesk'", "sans-serif"],
+            "body-md": ["'Space Grotesk'", "sans-serif"],
+            "body-sm": ["'Space Grotesk'", "sans-serif"],
+            "label-uppercase": ["'Space Grotesk'", "sans-serif"],
+            "label-meta": ["'Space Grotesk'", "sans-serif"]
+          },
+          fontSize: {
+            "display-xl": ["clamp(2rem, 1.25rem + 3.5vw, 4.25rem)", { lineHeight: "1.08", letterSpacing: "-0.02em", fontWeight: "400" }],
+            "headline-lg": ["clamp(1.75rem, 1.2rem + 2.2vw, 3rem)", { lineHeight: "1.15", letterSpacing: "-0.01em", fontWeight: "400" }],
+            "headline-md": ["clamp(1.35rem, 1rem + 1.2vw, 2rem)", { lineHeight: "1.25", letterSpacing: "0em", fontWeight: "400" }],
+            "headline-sm": ["clamp(1.15rem, 0.95rem + 0.8vw, 1.5rem)", { lineHeight: "1.35", letterSpacing: "0.01em", fontWeight: "400" }],
+            "body-lg": ["clamp(1rem, 0.95rem + 0.3vw, 1.125rem)", { lineHeight: "1.8", letterSpacing: "0.01em", fontWeight: "300" }],
+            "body-md": ["0.9375rem", { lineHeight: "1.625rem", letterSpacing: "0.01em", fontWeight: "400" }],
+            "body-sm": ["0.8125rem", { lineHeight: "1.45rem", letterSpacing: "0.015em", fontWeight: "400" }],
+            "label-uppercase": ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.15em", fontWeight: "500" }],
+            "label-meta": ["0.75rem", { lineHeight: "1.125rem", letterSpacing: "0.14em", fontWeight: "500" }]
+          }
+        }
+      }
+    };
+  </script>
+</head>
+<body class="bg-ivory font-space font-normal text-body-md text-charcoal antialiased selection:bg-charcoal selection:text-ivory">
+
+<!-- Header & Navigation -->
+<header class="fixed top-0 left-0 right-0 z-50 bg-ivory border-b border-charcoal/15">
+  <div class="h-20 max-w-7xl mx-auto px-margin-mobile lg:px-margin flex items-center justify-between">
+    <a class="flex items-center gap-space-xs" href="#">
+      <span class="font-bodoni font-normal text-[1.4rem] uppercase tracking-[0.28em] text-charcoal">VÉRRO</span>
+    </a>
+    <!-- Desktop Nav -->
+    <nav class="hidden md:flex items-center gap-space-lg">
+      <a class="font-space font-medium text-label-uppercase uppercase text-charcoal hover:text-gold transition-colors tracking-[0.16em]" href="#product-showcase">VOL. 01</a>
+<a class="font-space font-medium text-label-uppercase uppercase text-charcoal/70 hover:text-charcoal transition-colors tracking-[0.16em]" href="#archive-section">ARCHIVE</a>
+<a class="font-space font-medium text-label-uppercase uppercase text-charcoal/70 hover:text-charcoal transition-colors tracking-[0.16em]" href="#philosophy">ABOUT</a>
+<a class="font-space font-medium text-label-uppercase uppercase text-charcoal/70 hover:text-charcoal transition-colors tracking-[0.16em]" href="#faq">FAQ</a>
+    </nav>
+    <!-- Right Action Area -->
+    <div class="flex items-center gap-3">
+      <button class="hidden sm:inline-flex items-center justify-center px-5 py-2.5 bg-charcoal text-ivory font-space font-medium text-label-uppercase tracking-[0.16em] hover:bg-gold hover:text-charcoal transition-colors duration-200" onclick="purchaseProduct('vol-01')" type="button">
+        ACQUIRE VOL. 01 — ₹399
+      </button>
+      <button aria-label="Toggle Navigation Menu" class="md:hidden flex items-center justify-center w-10 h-10 text-charcoal hover:text-gold transition-colors focus:outline-none" onclick="toggleMobileMenu()" type="button">
+        <span class="material-symbols-outlined text-[24px]" id="mobile-menu-icon">menu</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="w-full min-h-screen pt-20">
+  <!-- Mobile Navigation Drawer -->
+  <div class="hidden md:hidden border-t border-charcoal/15 bg-parchment px-margin-mobile py-6 flex-col gap-4" id="mobile-drawer">
+  <nav class="flex flex-col gap-4">
+    <a class="font-space font-medium text-label-uppercase uppercase text-charcoal tracking-[0.16em] py-1" href="#product-showcase" onclick="toggleMobileMenu()">VOL. 01</a>
+<a class="font-space font-medium text-label-uppercase uppercase text-charcoal/70 tracking-[0.16em] py-1" href="#archive-section" onclick="toggleMobileMenu()">ARCHIVE</a>
+<a class="font-space font-medium text-label-uppercase uppercase text-charcoal/70 tracking-[0.16em] py-1" href="#philosophy" onclick="toggleMobileMenu()">ABOUT</a>
+<a class="font-space font-medium text-label-uppercase uppercase text-charcoal/70 tracking-[0.16em] py-1" href="#faq" onclick="toggleMobileMenu()">FAQ</a>
+  </nav>
+  <div class="pt-4 border-t border-charcoal/15">
+    <button class="w-full py-3 bg-charcoal text-ivory font-space font-medium text-label-uppercase tracking-[0.16em] hover:bg-gold hover:text-charcoal transition-colors text-center" onclick="purchaseProduct('vol-01')" type="button">
+      ACQUIRE VOL. 01 — ₹399
+    </button>
+  </div>
+</div>
+
+  <div class="flex flex-col w-full">
+    <!-- 1. Hero Section -->
+    <section class="relative w-full px-margin-mobile lg:px-margin pt-8 lg:pt-14 pb-20 max-w-7xl mx-auto">
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-y-12 lg:gap-gutter items-start">
+    <!-- Left Column -->
+    <div class="lg:col-span-5 flex flex-col justify-between pt-2">
+      <div>
+        <div class="flex items-center gap-space-sm mb-6">
+          <span class="inline-block w-2 h-2 rounded-full bg-gold"></span>
+          <span class="font-mono-archival text-[10px] text-charcoal/70 uppercase tracking-[0.16em]">DIGITAL RELEASE</span>
+        </div>
+        <h1 class="font-bodoni font-normal hero-heading text-charcoal mb-8">
+          DESIGNED<br/>FOR THE<br/><span class="font-normal italic tracking-[-0.01em] text-charcoal">UNORDINARY.</span>
+        </h1>
+        <div class="w-16 h-px bg-charcoal/20 mb-8"></div>
+        <p class="font-space font-light text-body-lg text-charcoal/75 max-w-md mb-4 leading-relaxed">
+          Digital wallpapers for Mac + iPhone. Fine-art brushstrokes, archival gold leaf, and uncompromising typographic discipline.
+        </p>
+        <p class="mb-10 flex items-center gap-2">
+          <span class="font-mono-archival text-[11px] uppercase tracking-[0.16em] text-charcoal/80">VOL. 01</span>
+          <span class="font-space font-medium text-label-meta uppercase tracking-[0.18em] text-charcoal/70">— NO DEFAULTS.</span>
+        </p>
+      </div>
+      <div class="flex flex-wrap items-center gap-4">
+        <a class="px-8 py-4 bg-charcoal text-ivory font-space font-medium text-label-uppercase tracking-[0.15em] hover:bg-gold hover:text-charcoal transition-colors duration-200" href="#product-showcase">
+          EXPLORE VOL. 01 →
+        </a>
+        <a class="px-8 py-4 border border-charcoal/30 text-charcoal font-space font-medium text-label-uppercase tracking-[0.15em] hover:border-charcoal hover:bg-charcoal/5 transition-colors duration-200" href="#archive-section">
+          VIEW ARCHIVE
+        </a>
+      </div>
+      <div class="mt-14 pt-6 border-t border-charcoal/15 grid grid-cols-3 gap-2 sm:gap-4">
+        <div>
+          <span class="block font-mono-archival text-[10px] text-charcoal/70 uppercase tracking-[0.12em]">CHAPTER</span>
+          <span class="font-space text-xs sm:text-sm font-medium tracking-wide">01 / THREE ARTWORKS</span>
+        </div>
+        <div>
+          <span class="block font-mono-archival text-[10px] text-charcoal/70 uppercase tracking-[0.12em]">FORMATS</span>
+          <span class="font-mono-archival text-xs sm:text-sm font-medium tracking-wider">MAC + IPHONE</span>
+        </div>
+        <div>
+          <span class="block font-mono-archival text-[10px] text-charcoal/70 uppercase tracking-[0.12em]">DELIVERY</span>
+          <span class="font-space text-xs sm:text-sm font-medium tracking-wide">INSTANT DIGITAL</span>
+        </div>
+      </div>
+    </div>
+    <!-- Right Column -->
+    <div class="lg:col-span-7 relative">
+      <div class="relative bg-parchment border border-charcoal/15 overflow-hidden group cursor-pointer" onclick="openLightbox(0)">
+        <picture>
+          <source srcset="public/images/hero/hero-lifestyle.webp" type="image/webp"/>
+          <img alt="VÉRRO Vol. 01 MacBook preview — No Risk, No Story daylight desk environment" class="w-full aspect-[16/10] object-cover transition-transform duration-700 ease-out group-hover:scale-[1.02]" fetchpriority="high" height="286" onerror="handleImageError(this, 'HERO_LIFESTYLE')" src="public/images/hero/hero-lifestyle.jpg" width="512"/>
+        </picture>
+        <div class="absolute top-4 left-4 bg-parchment px-3 py-1.5 border border-charcoal/20 flex items-center gap-2">
+          <span class="w-1.5 h-1.5 rounded-full bg-gold"></span>
+          <span class="font-mono-archival text-[11px] uppercase tracking-[0.14em] text-charcoal">PLATE 01 · NO RISK, NO STORY</span>
+        </div>
+        <div class="absolute bottom-4 right-4 bg-charcoal text-ivory px-3 py-1.5 text-xs font-space font-medium tracking-[0.14em] opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1.5">
+          <span class="material-symbols-outlined text-[16px]">fullscreen</span>
+          <span>VIEW PREVIEW</span>
+        </div>
+      </div>
+      <div class="flex items-center justify-between mt-3 text-charcoal/70 font-mono-archival text-[11px] tracking-[0.14em]">
+        <span>[01 / NO RISK, NO STORY]</span>
+        <span class="uppercase">MACBOOK PRO PREVIEW</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+    <!-- 2. Curatorial Manifesto -->
+    <section class="w-full bg-parchment border-y border-charcoal/15 py-24">
+  <div class="max-w-4xl mx-auto px-margin-mobile text-center flex flex-col items-center">
+    <span class="font-mono-archival text-[11px] tracking-[0.2em] text-charcoal/70 mb-4 uppercase">THE CURATORIAL MANIFESTO</span>
+    <h2 class="font-bodoni font-normal section-heading-lg text-charcoal max-w-3xl mb-8">
+      <span class="font-mono-archival text-xs sm:text-sm tracking-[0.18em] block mb-2 text-charcoal/80 font-normal">VOL. 01</span>
+      NO DEFAULTS.<br/>
+      <span class="font-space font-light italic text-charcoal/80 text-xl sm:text-2xl lg:text-3xl block mt-2">Three wallpapers. One money chapter.</span>
+    </h2>
+    <p class="font-space font-light text-body-lg text-charcoal/80 max-w-2xl leading-relaxed mb-6">
+      Designed to be seen. Not scrolled past. We reject sterile default screensavers and corporate color gradients in pursuit of physical tactile depth, architectural shadows, and raw painterly intent.
+    </p>
+    <div class="inline-flex items-center gap-3 text-charcoal font-mono-archival text-[11px] tracking-[0.18em] uppercase py-2 px-4 border border-charcoal/20 bg-ivory">
+      <span class="font-bodoni text-xs font-normal tracking-[0.2em]">VÉRRO</span>
+      <span>·</span>
+      <span class="font-space text-[10px] tracking-[0.16em]">DESIGNED FOR THE UNORDINARY.</span>
+    </div>
+  </div>
+</section>
+
+    <!-- 3. Archive Collection Card -->
+    <section class="w-full px-margin-mobile lg:px-margin py-24 max-w-7xl mx-auto" id="archive-section">
+  <div class="flex flex-col md:flex-row md:items-end justify-between mb-12 border-b border-charcoal/15 pb-6 gap-4">
+    <div>
+      <span class="font-mono-archival text-[11px] text-charcoal/70 tracking-[0.18em] block mb-1 uppercase">MONOGRAPH CATALOGUE</span>
+      <h2 class="font-bodoni font-normal section-heading-md tracking-tight uppercase text-charcoal">COLLECTION 01 / ARCHIVE PROOF</h2>
+    </div>
+    <div class="flex items-center gap-3 text-charcoal/70 font-space text-xs tracking-[0.14em]">
+      <span class="w-2 h-2 bg-gold rounded-full"></span>
+      <span class="text-charcoal font-medium uppercase">TAP / HOVER TO REVEAL IN SITU</span>
+    </div>
+  </div>
+  <!-- 2-State Interactive Card -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
+    <div class="interactive-card lg:col-span-8 group relative bg-parchment overflow-hidden border border-charcoal/15 cursor-pointer select-none" id="interactive-proof-card" onclick="toggleCardTouchState()">
+      <!-- Base State: Print Proof Sheet -->
+      <div class="relative w-full aspect-[16/10] overflow-hidden">
+        <picture>
+          <source srcset="public/images/collections/vol-01-proof-sheet.webp" type="image/webp"/>
+          <img alt="VÉRRO Vol. 01 editorial collection proof sheet featuring trilogy titles: No Risk No Story, Money Talks, and Move Like They're Watching" class="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]" decoding="async" height="382" loading="lazy" onerror="handleImageError(this, 'PROOF_SHEET_BASE')" src="public/images/collections/vol-01-proof-sheet.jpg" width="512"/>
+        </picture>
+        <div class="absolute inset-0 bg-charcoal/5 pointer-events-none mix-blend-multiply"></div>
+      </div>
+      <!-- In-Situ Hover & Tap State -->
+      <div class="active-in-situ absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500 ease-in-out pointer-events-none overflow-hidden">
+        <picture>
+          <source srcset="public/images/lifestyle/macbook-daylight-no-risk.webp" type="image/webp"/>
+          <img alt="VÉRRO Vol. 01 in-situ lifestyle preview showing MacBook on stone desk" class="w-full h-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.03]" decoding="async" height="286" loading="lazy" onerror="handleImageError(this, 'IN_SITU_HOVER')" src="public/images/lifestyle/macbook-daylight-no-risk.jpg" width="512"/>
+        </picture>
+        <div class="absolute inset-0 bg-black/10"></div>
+        <div class="absolute top-4 right-4 bg-charcoal text-ivory px-3 py-1 font-mono-archival text-[11px] tracking-[0.14em] uppercase">
+          IN SITU VIEW
+        </div>
+      </div>
+      <!-- Badge Overlay -->
+      <div class="absolute top-4 left-4 bg-parchment px-3 py-1 border border-charcoal/20 font-mono-archival text-[11px] tracking-[0.14em] uppercase text-charcoal">
+        SPECIMEN PROOF
+      </div>
+      <div class="absolute bottom-4 left-4 bg-parchment px-3 py-1.5 border border-charcoal/20 flex items-center gap-2 text-charcoal">
+        <span class="material-symbols-outlined text-[16px] text-charcoal">touch_app</span>
+        <span class="font-space font-medium text-[11px] tracking-[0.14em] uppercase">TAP / HOVER TO REVEAL IN SITU</span>
+      </div>
+    </div>
+    <!-- Card Metadata Column -->
+    <div class="lg:col-span-4 bg-parchment border border-charcoal/15 p-8 flex flex-col justify-between">
+      <div>
+        <div class="flex items-center justify-between border-b border-charcoal/15 pb-4 mb-6">
+          <span class="font-mono-archival text-[11px] text-charcoal/70 tracking-[0.16em] uppercase">SPECIFICATION 01</span>
+          <span class="font-mono-archival text-xs tracking-[0.14em] text-charcoal/60 uppercase">AVAILABLE NOW</span>
+        </div>
+        <h3 class="font-bodoni font-normal text-headline-sm mb-3 text-charcoal">VOL. 01 — NO DEFAULTS.</h3>
+        <p class="font-space font-light text-body-md text-charcoal/75 mb-6 leading-relaxed">
+          The inaugural set. Three textured artworks designed as an intentional visual identity across your primary screens.
+        </p>
+        <div class="space-y-3 mb-8">
+          <div class="flex justify-between items-center text-sm py-2 border-b border-charcoal/10 font-space">
+            <span class="text-charcoal/65">Aspect Ratios</span>
+            <span class="font-mono-archival text-xs tracking-wider font-medium text-charcoal">Mac + iPhone</span>
+          </div>
+          <div class="flex justify-between items-center text-sm py-2 border-b border-charcoal/10 font-space">
+            <span class="text-charcoal/65">Wallpapers Included</span>
+            <span class="font-medium text-charcoal">3 Curated Artworks</span>
+          </div>
+          <div class="flex justify-between items-center text-sm py-2 border-b border-charcoal/10 font-space">
+            <span class="text-charcoal/65">Delivery</span>
+            <span class="font-medium text-charcoal">INSTANT DIGITAL Files</span>
+          </div>
+          <div class="flex justify-between items-center text-sm py-2 border-b border-charcoal/10 font-space">
+            <span class="text-charcoal/65">Usage</span>
+            <span class="font-medium text-charcoal">PERSONAL LICENSE</span>
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="flex items-baseline justify-between mb-4">
+          <span class="font-mono-archival text-xs uppercase tracking-[0.16em] text-charcoal/65">DIGITAL DOWNLOAD</span>
+          <span class="font-bodoni font-normal price-fluid text-charcoal">₹399</span>
+        </div>
+        <button class="w-full py-4 bg-charcoal text-ivory hover:bg-gold hover:text-charcoal transition-colors duration-200 font-space font-medium text-label-uppercase tracking-[0.16em] flex items-center justify-center gap-2" onclick="purchaseProduct('vol-01')" type="button">
+          <span>GET VOL. 01 NOW</span>
+          <span class="material-symbols-outlined text-[18px]">arrow_forward</span>
+        </button>
+      </div>
+    </div>
+  </div>
+</section>
+
+    <!-- 4. Dedicated Product Showcase -->
+    <section class="w-full bg-parchment border-t border-charcoal/15 py-24 px-margin-mobile lg:px-margin" id="product-showcase">
+  <div class="max-w-7xl mx-auto">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
+      <!-- Left: Tactile Proof Sheet Visual -->
+      <div class="lg:col-span-6 relative">
+        <div class="relative bg-ivory p-4 sm:p-6 border border-charcoal/20 cursor-pointer" onclick="openLightbox(1)">
+          <picture>
+            <source srcset="public/images/collections/vol-01-proof-sheet.webp" type="image/webp"/>
+            <img alt="VÉRRO Vol. 01 editorial collection proof sheet featuring trilogy titles: No Risk No Story, Money Talks, and Move Like They're Watching" class="w-full object-cover" decoding="async" height="382" loading="lazy" onerror="handleImageError(this, 'PROOF_SHEET_SHOWCASE')" src="public/images/collections/vol-01-proof-sheet.jpg" width="512"/>
+          </picture>
+          <div class="mt-4 pt-4 border-t border-charcoal/15 flex justify-between items-center text-charcoal/70 font-mono-archival text-[11px] tracking-[0.14em]">
+            <span>TRILOGY PROOF SPECIMEN</span>
+            <span>VOL. 01</span>
+          </div>
+        </div>
+      </div>
+      <!-- Right: Details & Purchase Hook -->
+      <div class="lg:col-span-6 flex flex-col justify-center">
+        <div class="mb-2">
+          <span class="font-mono-archival text-[11px] text-charcoal/70 tracking-[0.2em] uppercase">OFFICIAL PACK</span>
+        </div>
+        <h2 class="font-bodoni font-normal text-[2rem] lg:text-[2.65rem] leading-[1.12] mb-2 text-charcoal">
+          VÉRRO / VOL. 01 — NO DEFAULTS.
+        </h2>
+        <p class="font-space font-light italic text-lg text-charcoal/80 mb-8">
+          Three wallpapers. One money chapter.
+        </p>
+        <!-- Tracklist -->
+        <div class="border-t border-charcoal/20 mb-8 divide-y divide-charcoal/10">
+          <div class="py-4 flex items-center justify-between group">
+  <div class="flex items-center gap-4">
+    <span class="font-mono-archival text-xs text-charcoal/60">01</span>
+    <span class="font-bodoni font-normal text-base tracking-wide text-charcoal group-hover:text-gold transition-colors">NO RISK, NO STORY</span>
+  </div>
+  <span class="font-mono-archival text-[10px] text-charcoal/60 uppercase tracking-wider">MAC · IPHONE</span>
+</div>
+<div class="py-4 flex items-center justify-between group">
+  <div class="flex items-center gap-4">
+    <span class="font-mono-archival text-xs text-charcoal/60">02</span>
+    <span class="font-bodoni font-normal text-base tracking-wide text-charcoal group-hover:text-gold transition-colors">MONEY TALKS</span>
+  </div>
+  <span class="font-mono-archival text-[10px] text-navy uppercase tracking-wider">MAC · IPHONE</span>
+</div>
+<div class="py-4 flex items-center justify-between group">
+  <div class="flex items-center gap-4">
+    <span class="font-mono-archival text-xs text-charcoal/60">03</span>
+    <span class="font-bodoni font-normal text-base tracking-wide text-charcoal group-hover:text-gold transition-colors">MOVE LIKE THEY’RE WATCHING</span>
+  </div>
+  <span class="font-mono-archival text-[10px] text-oxblood uppercase tracking-wider">MAC · IPHONE</span>
+</div>
+        </div>
+        <!-- Feature Chips -->
+        <div class="flex flex-wrap gap-2 mb-8">
+          <span class="px-3 py-1.5 border border-charcoal/20 text-charcoal font-space font-medium text-[11px] tracking-[0.14em] uppercase bg-ivory">
+  MAC + IPHONE RATIOS
+</span>
+<span class="px-3 py-1.5 border border-charcoal/20 text-charcoal font-space font-medium text-[11px] tracking-[0.14em] uppercase bg-ivory">
+  HIGH RESOLUTION
+</span>
+<span class="px-3 py-1.5 border border-charcoal/20 text-charcoal font-space font-medium text-[11px] tracking-[0.14em] uppercase bg-ivory">
+  INSTANT DIGITAL DELIVERY
+</span>
+<span class="px-3 py-1.5 border border-charcoal/20 text-charcoal font-space font-medium text-[11px] tracking-[0.14em] uppercase bg-ivory">
+  PERPETUAL PERSONAL USE
+</span>
+        </div>
+        <!-- Price & CTA Box -->
+        <div class="p-6 bg-ivory border border-charcoal/20">
+          <div class="flex items-baseline justify-between mb-4">
+            <div>
+              <span class="font-mono-archival text-[10px] uppercase tracking-[0.16em] text-charcoal/65 block">PRICE FOR THE TRILOGY</span>
+              <span class="font-bodoni font-normal text-3xl sm:text-4xl text-charcoal">₹399</span>
+              <span class="font-space text-xs text-charcoal/65 ml-2">(One-time purchase)</span>
+            </div>
+            <div class="text-right">
+              <span class="inline-block px-2.5 py-1 bg-charcoal/5 border border-charcoal/15 text-charcoal font-mono-archival text-[10px] uppercase tracking-[0.14em]">
+                INSTANT ACCESS
+              </span>
+            </div>
+          </div>
+          <button class="w-full py-4 bg-charcoal text-ivory hover:bg-gold hover:text-charcoal transition-colors duration-200 font-space font-medium text-label-uppercase tracking-[0.2em] flex items-center justify-center gap-3" onclick="purchaseProduct('vol-01')" type="button">
+            <span>GET VOL. 01 →</span>
+            <span class="font-bodoni text-xs font-normal opacity-85">(₹399)</span>
+          </button>
+          <div class="mt-4 flex items-center justify-between text-charcoal/70 font-mono-archival text-[10px] tracking-[0.14em] uppercase">
+            <span class="flex items-center gap-1">
+              <span class="material-symbols-outlined text-[14px]">lock</span> INSTANT DOWNLOAD LINK
+            </span>
+            <span>PERSONAL LICENSE</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+    <!-- 5. Individual Preview Gallery -->
+    <section class="w-full px-margin-mobile lg:px-margin py-24 max-w-7xl mx-auto">
+  <div class="flex flex-col md:flex-row md:items-end justify-between mb-16 border-b border-charcoal/15 pb-6">
+    <div>
+      <span class="font-mono-archival text-[11px] text-charcoal/70 tracking-[0.2em] block mb-1 uppercase">THE TRILOGY</span>
+      <h2 class="font-bodoni font-normal section-heading-md uppercase tracking-tight text-charcoal">PREVIEW GALLERY</h2>
+    </div>
+    <p class="font-space font-light text-body-sm text-charcoal/75 max-w-sm mt-3 md:mt-0">
+      Each artwork is crafted with tactile strokes, gold leaf accents, and disciplined typography. Click any preview to inspect.
+    </p>
+  </div>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+    <div class="flex flex-col group cursor-pointer" onclick="openLightbox(0)">
+  <div class="relative bg-parchment aspect-[4/5] overflow-hidden border border-charcoal/15 mb-4">
+    <picture>
+      <source srcset="public/images/previews/01-no-risk-no-story.webp" type="image/webp"/>
+      <img alt="VÉRRO Vol. 01 MacBook preview — No Risk, No Story" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" decoding="async" height="286" loading="lazy" onerror="handleImageError(this, 'ARTWORK_01')" src="public/images/previews/01-no-risk-no-story.jpg" width="512"/>
+    </picture>
+    <div class="absolute inset-0 bg-charcoal/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+      <span class="bg-ivory border border-charcoal/20 px-4 py-2 font-space font-medium text-xs tracking-[0.14em] uppercase text-charcoal">INSPECT PREVIEW</span>
+    </div>
+    <span class="absolute top-3 left-3 bg-ivory border border-charcoal/15 px-2 py-0.5 font-mono-archival text-[10px] text-charcoal tracking-widest uppercase">01 / 03</span>
+  </div>
+  <div class="flex justify-between items-baseline">
+    <h3 class="font-bodoni font-normal text-base sm:text-lg uppercase tracking-wider text-charcoal">NO RISK, NO STORY</h3>
+    <span class="font-mono-archival text-[11px] text-charcoal/70 tracking-widest">MAC · IPHONE</span>
+  </div>
+  <p class="font-space font-light text-body-sm text-charcoal/75 mt-1">Deep gold impasto across charcoal linen.</p>
+</div>
+<div class="flex flex-col group cursor-pointer" onclick="openLightbox(1)">
+  <div class="relative bg-parchment aspect-[4/5] overflow-hidden border border-charcoal/15 mb-4 flex flex-col items-center justify-center p-6 text-center verro-asset-fallback select-none">
+    <div class="w-12 h-px bg-charcoal/20 mb-4"></div>
+    <span class="font-mono-archival text-[10px] text-navy tracking-[0.2em] uppercase mb-2">ARCHIVE REF · PLATE 02</span>
+    <h4 class="font-bodoni font-normal text-xl uppercase tracking-wider mb-2 text-charcoal">MONEY TALKS</h4>
+    <p class="font-space font-light text-xs text-charcoal/75 max-w-[200px] mb-4 leading-relaxed">Dedicated individual preview asset pending from atelier.</p>
+    <span class="font-mono-archival text-[9px] text-charcoal/80 tracking-[0.16em] uppercase border border-charcoal/25 px-2.5 py-1 bg-ivory">SPECIMEN IN PROOF</span>
+    <div class="w-12 h-px bg-charcoal/20 mt-4"></div>
+    <div class="absolute inset-0 bg-charcoal/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+      <span class="bg-ivory border border-charcoal/20 px-4 py-2 font-space font-medium text-xs tracking-[0.14em] uppercase text-charcoal">INSPECT PROOF</span>
+    </div>
+    <span class="absolute top-3 left-3 bg-ivory border border-charcoal/15 px-2 py-0.5 font-mono-archival text-[10px] text-charcoal tracking-widest uppercase">02 / 03</span>
+  </div>
+  <div class="flex justify-between items-baseline">
+    <h3 class="font-bodoni font-normal text-base sm:text-lg uppercase tracking-wider text-charcoal">MONEY TALKS</h3>
+    <span class="font-mono-archival text-[11px] text-navy tracking-widest">MAC · IPHONE</span>
+  </div>
+  <p class="font-space font-light text-body-sm text-charcoal/75 mt-1">Restrained midnight navy with burnished bronze foil lettering.</p>
+</div>
+<div class="flex flex-col group cursor-pointer" onclick="openLightbox(2)">
+  <div class="relative bg-parchment aspect-[4/5] overflow-hidden border border-charcoal/15 mb-4">
+    <picture>
+      <source srcset="public/images/previews/03-move-like-theyre-watching.webp" type="image/webp"/>
+      <img alt="VÉRRO Vol. 01 MacBook and iPhone preview — Move Like They're Watching" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" decoding="async" height="286" loading="lazy" onerror="handleImageError(this, 'ARTWORK_03')" src="public/images/previews/03-move-like-theyre-watching.jpg" width="512"/>
+    </picture>
+    <div class="absolute inset-0 bg-charcoal/10 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+      <span class="bg-ivory border border-charcoal/20 px-4 py-2 font-space font-medium text-xs tracking-[0.14em] uppercase text-charcoal">INSPECT PREVIEW</span>
+    </div>
+    <span class="absolute top-3 left-3 bg-ivory border border-charcoal/15 px-2 py-0.5 font-mono-archival text-[10px] text-charcoal tracking-widest uppercase">03 / 03</span>
+  </div>
+  <div class="flex justify-between items-baseline">
+    <h3 class="font-bodoni font-normal text-base sm:text-lg uppercase tracking-wider text-charcoal">MOVE LIKE THEY’RE WATCHING</h3>
+    <span class="font-mono-archival text-[11px] text-oxblood tracking-widest">MAC · IPHONE</span>
+  </div>
+  <p class="font-space font-light text-body-sm text-charcoal/75 mt-1">Oxblood & charcoal chiaroscuro with balanced typography.</p>
+</div>
+  </div>
+</section>
+
+    <!-- 6. Full-Width Nocturnal Editorial Statement -->
+    <section class="w-full bg-charcoal text-ivory py-28 relative overflow-hidden">
+  <div class="max-w-7xl mx-auto px-margin-mobile lg:px-margin grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+    <div class="lg:col-span-7 flex flex-col justify-center">
+      <div class="flex items-center gap-3 mb-6">
+        <span class="w-8 h-px bg-gold"></span>
+        <span class="font-mono-archival text-[11px] text-gold tracking-[0.25em] uppercase">DAILY RITUAL</span>
+      </div>
+      <h2 class="font-bodoni font-normal editorial-heading leading-[1.08] tracking-tight mb-8 text-ivory">
+        MORE THAN A<br/>WALLPAPER.<br/>
+        <span class="text-gold font-normal italic block mt-3">A DAILY STANDARD.</span>
+      </h2>
+      <p class="font-space font-light text-body-lg text-parchment/80 max-w-xl mb-8 leading-relaxed">
+        The same visual language, everywhere your screen goes. Mac. iPhone. One intentional identity.
+      </p>
+      <div class="flex flex-wrap items-center gap-6 pt-4 border-t border-white/10">
+        <div class="flex flex-col">
+          <span class="font-bodoni font-normal text-2xl sm:text-3xl text-ivory">03</span>
+          <span class="font-mono-archival text-[10px] tracking-[0.18em] text-gold uppercase">WALLPAPERS</span>
+        </div>
+        <div class="w-px h-10 bg-white/10"></div>
+        <div class="flex flex-col">
+          <span class="font-space font-medium text-lg sm:text-xl text-ivory">DUAL FORMAT</span>
+          <span class="font-mono-archival text-[10px] tracking-[0.18em] text-gold uppercase">MAC + IPHONE</span>
+        </div>
+        <div class="w-px h-10 bg-white/10"></div>
+        <div class="flex flex-col">
+          <span class="font-space font-medium text-lg sm:text-xl text-ivory">INSTANT</span>
+          <span class="font-mono-archival text-[10px] tracking-[0.18em] text-gold uppercase">DIGITAL DISPATCH</span>
+        </div>
+      </div>
+    </div>
+    <div class="lg:col-span-5 relative">
+      <div class="relative overflow-hidden border border-white/10 bg-black/40">
+        <picture>
+          <source srcset="public/images/lifestyle/evening-study-move.webp" type="image/webp"/>
+          <img alt="VÉRRO Vol. 01 nocturnal study setup with MacBook and iPhone — Move Like They're Watching" class="w-full aspect-[4/5] object-cover" decoding="async" height="286" loading="lazy" onerror="handleImageError(this, 'EDITORIAL_LIFESTYLE')" src="public/images/lifestyle/evening-study-move.jpg" width="512"/>
+        </picture>
+        <div class="absolute inset-0 bg-gradient-to-t from-charcoal via-transparent to-transparent"></div>
+        <div class="absolute bottom-6 left-6 right-6">
+          <p class="font-mono-archival text-[11px] text-gold tracking-[0.18em] uppercase mb-1">ATMOSPHERE: EVENING STUDY</p>
+          <p class="font-bodoni font-normal italic text-lg text-ivory">Move like they’re watching.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+    <!-- 7. Delivery Manifest & Atelier Philosophy -->
+    <section class="w-full px-margin-mobile lg:px-margin py-24 max-w-7xl mx-auto" id="philosophy">
+      <!-- Section Title -->
+<div class="text-center max-w-2xl mx-auto mb-16">
+  <span class="font-mono-archival text-[11px] text-charcoal/70 tracking-[0.2em] block mb-2 uppercase">DELIVERY MANIFEST</span>
+  <h2 class="font-bodoni font-normal section-heading-lg uppercase text-charcoal">WHAT YOU RECEIVE</h2>
+  <p class="font-space font-light text-body-md text-charcoal/75 mt-3">Delivered directly to your inbox immediately upon purchase.</p>
+</div>
+<!-- 4-Block Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-24">
+  <div class="bg-parchment border border-charcoal/15 p-6 flex flex-col justify-between">
+  <span class="font-mono-archival text-[10px] text-charcoal/70 tracking-widest uppercase">01 / ARCHIVE</span>
+  <div class="my-6">
+    <h3 class="font-bodoni font-normal text-lg mb-2 text-charcoal">03 DIGITAL WALLPAPERS</h3>
+    <p class="font-space font-light text-body-sm text-charcoal/75">The full Vol. 01 chapter: No Risk No Story, Money Talks, Move Like They’re Watching.</p>
+  </div>
+  <span class="font-mono-archival text-[10px] uppercase tracking-widest text-charcoal/60">COMPLETE CHAPTER</span>
+</div>
+<div class="bg-parchment border border-charcoal/15 p-6 flex flex-col justify-between">
+  <span class="font-mono-archival text-[10px] text-charcoal/70 tracking-widest uppercase">02 / HARDWARE</span>
+  <div class="my-6">
+    <h3 class="font-bodoni font-normal text-lg mb-2 text-charcoal">MAC + IPHONE</h3>
+    <p class="font-space font-light text-body-sm text-charcoal/75">Tailored desktop and vertical mobile dimensions framed cleanly for screens and docks.</p>
+  </div>
+  <span class="font-mono-archival text-[10px] uppercase tracking-widest text-charcoal/60">DUAL FORMAT</span>
+</div>
+<div class="bg-parchment border border-charcoal/15 p-6 flex flex-col justify-between">
+  <span class="font-mono-archival text-[10px] text-charcoal/70 tracking-widest uppercase">03 / DISPATCH</span>
+  <div class="my-6">
+    <h3 class="font-bodoni font-normal text-lg mb-2 text-charcoal">INSTANT DELIVERY</h3>
+    <p class="font-space font-light text-body-sm text-charcoal/75">Automated download link delivered to your email address upon successful payment.</p>
+  </div>
+  <span class="font-mono-archival text-[10px] uppercase tracking-widest text-charcoal/60">IMMEDIATE ACCESS</span>
+</div>
+<div class="bg-parchment border border-charcoal/15 p-6 flex flex-col justify-between">
+  <span class="font-mono-archival text-[10px] text-charcoal/70 tracking-widest uppercase">04 / LICENSE</span>
+  <div class="my-6">
+    <h3 class="font-bodoni font-normal text-lg mb-2 text-charcoal">PERPETUAL USE</h3>
+    <p class="font-space font-light text-body-sm text-charcoal/75">Direct digital files for personal use on your own personal devices anytime.</p>
+  </div>
+  <span class="font-mono-archival text-[10px] uppercase tracking-widest text-charcoal/60">PERSONAL LICENSE</span>
+</div>
+</div>
+      <div class="bg-parchment border border-charcoal/15 p-8 lg:p-16 grid grid-cols-1 lg:grid-cols-12 gap-12 items-center">
+  <div class="lg:col-span-5">
+    <span class="font-mono-archival text-[11px] text-charcoal/70 tracking-[0.2em] block mb-2 uppercase">ABOUT THE ATELIER</span>
+    <h3 class="font-bodoni font-normal text-[2rem] lg:text-[2.65rem] leading-tight mb-4 text-charcoal">
+      DESIGNED FOR THE UNORDINARY.
+    </h3>
+    <p class="font-space font-light text-body-md text-charcoal/75 leading-relaxed">
+      We make wallpapers for people who spend enough time looking at a screen to care what they see.
+    </p>
+  </div>
+  <div class="lg:col-span-7 grid grid-cols-1 sm:grid-cols-3 gap-6">
+    <div class="border-t border-charcoal/20 pt-4">
+  <span class="font-mono-archival text-xs text-charcoal/70 tracking-widest">PILLAR 01</span>
+  <h4 class="font-space font-medium text-base sm:text-lg my-2 uppercase tracking-wider text-charcoal">CURATED</h4>
+  <p class="font-space font-light text-body-sm text-charcoal/75">Deliberate single chapters built around focused themes.</p>
+</div>
+<div class="border-t border-charcoal/20 pt-4">
+  <span class="font-mono-archival text-xs text-charcoal/70 tracking-widest">PILLAR 02</span>
+  <h4 class="font-space font-medium text-base sm:text-lg my-2 uppercase tracking-wider text-charcoal">INTENTIONAL</h4>
+  <p class="font-space font-light text-body-sm text-charcoal/75">Crafted to honor typography and composition on personal screens.</p>
+</div>
+<div class="border-t border-charcoal/20 pt-4">
+  <span class="font-mono-archival text-xs text-charcoal/70 tracking-widest">PILLAR 03</span>
+  <h4 class="font-space font-medium text-base sm:text-lg my-2 uppercase tracking-wider text-charcoal">EXPRESSIVE</h4>
+  <p class="font-space font-light text-body-sm text-charcoal/75">A tactile counterweight to default operating system visuals.</p>
+</div>
+  </div>
+</div>
+    </section>
+
+    <!-- 8. Accordion FAQ -->
+    <section class="w-full bg-parchment border-t border-charcoal/15 py-24 px-margin-mobile lg:px-margin" id="faq">
+  <div class="max-w-4xl mx-auto">
+    <div class="text-center mb-16">
+      <span class="font-mono-archival text-[11px] text-charcoal/70 tracking-[0.2em] block mb-2 uppercase">INQUIRIES</span>
+      <h2 class="font-bodoni font-normal section-heading-lg uppercase text-charcoal">FREQUENTLY ASKED</h2>
+    </div>
+    <div class="divide-y divide-charcoal/15 border-y border-charcoal/15" id="faq-accordion">
+      <div class="faq-item py-6">
+  <button aria-expanded="false" class="faq-toggle w-full flex justify-between items-center text-left font-space font-normal text-base sm:text-lg text-charcoal hover:text-gold transition-colors focus:outline-none" type="button">
+    <span>What do I receive with my order?</span>
+    <span class="material-symbols-outlined transition-transform duration-300 icon-arrow">add</span>
+  </button>
+  <div class="faq-content hidden pt-4 text-charcoal/80 font-space font-light text-body-md leading-relaxed pr-8">
+    You receive high-resolution image files for all three artworks in Vol. 01: No Risk No Story, Money Talks, and Move Like They’re Watching. Each artwork includes dedicated formats tailored for both Mac desktop and iPhone mobile screens.
+  </div>
+</div>
+<div class="faq-item py-6">
+  <button aria-expanded="false" class="faq-toggle w-full flex justify-between items-center text-left font-space font-normal text-base sm:text-lg text-charcoal hover:text-gold transition-colors focus:outline-none" type="button">
+    <span>What devices are supported?</span>
+    <span class="material-symbols-outlined transition-transform duration-300 icon-arrow">add</span>
+  </button>
+  <div class="faq-content hidden pt-4 text-charcoal/80 font-space font-light text-body-md leading-relaxed pr-8">
+    The collection is formatted for Mac desktop and laptop displays as well as modern iPhone screens. The landscape files fit MacBook Air, MacBook Pro, and external monitors, while the portrait files are proportioned for iPhone lock screens and home screens.
+  </div>
+</div>
+<div class="faq-item py-6">
+  <button aria-expanded="false" class="faq-toggle w-full flex justify-between items-center text-left font-space font-normal text-base sm:text-lg text-charcoal hover:text-gold transition-colors focus:outline-none" type="button">
+    <span>How does digital delivery work?</span>
+    <span class="material-symbols-outlined transition-transform duration-300 icon-arrow">add</span>
+  </button>
+  <div class="faq-content hidden pt-4 text-charcoal/80 font-space font-light text-body-md leading-relaxed pr-8">
+    Digital delivery is immediate. Once your payment is verified, your download access is provided immediately and also sent to your designated email address for ongoing retrieval.
+  </div>
+</div>
+<div class="faq-item py-6">
+  <button aria-expanded="false" class="faq-toggle w-full flex justify-between items-center text-left font-space font-normal text-base sm:text-lg text-charcoal hover:text-gold transition-colors focus:outline-none" type="button">
+    <span>Can I use the wallpapers on multiple personal devices?</span>
+    <span class="material-symbols-outlined transition-transform duration-300 icon-arrow">add</span>
+  </button>
+  <div class="faq-content hidden pt-4 text-charcoal/80 font-space font-light text-body-md leading-relaxed pr-8">
+    Yes. A single purchase grants you a personal license to install and enjoy the wallpapers on your personal Mac, iPhone, and companion personal devices. Commercial redistribution or resale is prohibited.
+  </div>
+</div>
+<div class="faq-item py-6">
+  <button aria-expanded="false" class="faq-toggle w-full flex justify-between items-center text-left font-space font-normal text-base sm:text-lg text-charcoal hover:text-gold transition-colors focus:outline-none" type="button">
+    <span>Are the wallpapers high resolution?</span>
+    <span class="material-symbols-outlined transition-transform duration-300 icon-arrow">add</span>
+  </button>
+  <div class="faq-content hidden pt-4 text-charcoal/80 font-space font-light text-body-md leading-relaxed pr-8">
+    Yes. All wallpapers are exported at pristine high resolution to ensure artwork details, gold textures, and serif typography render crisply on Retina and modern high-density screens.
+  </div>
+</div>
+    </div>
+    <div class="mt-12 text-center">
+      <p class="font-space text-body-sm text-charcoal/75">
+        Have a question or custom inquiry? Reach us at 
+        <a class="font-mono-archival text-xs text-charcoal underline underline-offset-4 hover:text-gold" href="mailto:atelier@verro.design">atelier@verro.design</a>
+      </p>
+    </div>
+  </div>
+</section>
+
+    <!-- 9. Final Call-to-Acquisition -->
+    <section class="w-full py-20 px-margin-mobile border-t border-charcoal/15 bg-ivory">
+  <div class="max-w-4xl mx-auto text-center flex flex-col items-center">
+    <span class="font-mono-archival text-[11px] text-charcoal/70 tracking-[0.25em] mb-3 uppercase">CURATED EDITION</span>
+    <h2 class="font-bodoni font-normal section-heading-lg uppercase mb-4 text-charcoal">ELEVATE YOUR WORKSPACE TODAY.</h2>
+    <p class="font-space font-light text-body-md text-charcoal/75 max-w-lg mb-8">
+      VOL. 01 — Three wallpapers. One money chapter. MAC + IPHONE.
+    </p>
+    <div class="flex flex-col sm:flex-row items-center gap-4">
+      <button class="px-10 py-4 bg-charcoal text-ivory hover:bg-gold hover:text-charcoal transition-colors duration-200 font-space font-medium text-label-uppercase tracking-[0.2em]" onclick="purchaseProduct('vol-01')" type="button">
+        ACQUIRE VOL. 01 — ₹399
+      </button>
+      <a class="px-8 py-4 border border-charcoal/30 text-charcoal font-space font-medium text-label-uppercase tracking-[0.16em] hover:border-charcoal hover:bg-charcoal/5 transition-colors" href="#product-showcase">
+        REVIEW ARTWORKS
+      </a>
+    </div>
+  </div>
+</section>
+  </div>
+</main>
+
+<!-- Lightbox Modal -->
+<!-- LIGHTBOX MODAL (FOR MARKETING PREVIEW INSPECTION) -->
+<div aria-modal="true" class="fixed inset-0 z-50 bg-charcoal/95 hidden items-center justify-center p-4 lg:p-8" id="image-lightbox" role="dialog">
+  <!-- Controls -->
+  <div class="absolute top-6 right-6 flex items-center gap-4 z-10">
+    <button aria-label="Close Lightbox" class="text-ivory hover:text-gold p-2 flex items-center gap-2 font-space font-medium text-label-meta text-xs tracking-[0.16em] uppercase transition-colors" onclick="closeLightbox()" type="button">
+      <span>CLOSE</span>
+      <span class="material-symbols-outlined text-[20px]">close</span>
+    </button>
+  </div>
+  <!-- Navigation Buttons -->
+  <button aria-label="Previous Preview" class="absolute left-4 top-1/2 -translate-y-1/2 text-ivory hover:text-gold p-2 transition-colors focus:outline-none" onclick="prevLightboxSlide()" type="button">
+    <span class="material-symbols-outlined text-[36px]">chevron_left</span>
+  </button>
+  <button aria-label="Next Preview" class="absolute right-4 top-1/2 -translate-y-1/2 text-ivory hover:text-gold p-2 transition-colors focus:outline-none" onclick="nextLightboxSlide()" type="button">
+    <span class="material-symbols-outlined text-[36px]">chevron_right</span>
+  </button>
+  <!-- Modal Content -->
+  <div class="max-w-5xl w-full flex flex-col items-center">
+    <div class="relative w-full max-h-[80vh] flex items-center justify-center" id="lightbox-container">
+      <img alt="VÉRRO Marketing Preview" class="max-w-full max-h-[75vh] object-contain border border-white/10" id="lightbox-img" src=""/>
+    </div>
+    <p class="mt-4 font-bodoni font-normal text-sm lg:text-base text-ivory tracking-wide text-center" id="lightbox-caption"></p>
+    <span class="font-mono-archival text-[10px] text-gold tracking-[0.16em] uppercase mt-1">ESC TO EXIT · USE ARROW KEYS TO NAVIGATE</span>
+  </div>
+</div>
+
+<!-- Footer -->
+<!-- FOOTER -->
+<footer class="w-full bg-parchment border-t border-charcoal/15 mt-space-2xl">
+  <div class="max-w-7xl mx-auto px-margin-mobile lg:px-margin py-space-xl flex flex-col gap-space-xl">
+    <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-space-lg">
+      <div class="flex flex-col gap-space-xs">
+        <span class="font-bodoni font-normal text-headline-md uppercase tracking-[0.28em] text-charcoal">VÉRRO</span>
+        <p class="font-space text-label-meta uppercase tracking-[0.18em] text-charcoal/70">DESIGNED FOR THE UNORDINARY.</p>
+      </div>
+      <nav class="flex flex-wrap items-center gap-space-md md:gap-space-lg">
+        <a class="font-space font-medium text-label-uppercase uppercase text-charcoal/70 hover:text-charcoal transition-colors tracking-[0.15em]" href="#product-showcase">VOL. 01</a>
+<a class="font-space font-medium text-label-uppercase uppercase text-charcoal/70 hover:text-charcoal transition-colors tracking-[0.15em]" href="#archive-section">ARCHIVE</a>
+<a class="font-space font-medium text-label-uppercase uppercase text-charcoal/70 hover:text-charcoal transition-colors tracking-[0.15em]" href="#philosophy">ABOUT</a>
+<a class="font-space font-medium text-label-uppercase uppercase text-charcoal/70 hover:text-charcoal transition-colors tracking-[0.15em]" href="#faq">FAQ</a>
+        <a class="font-space font-medium text-label-uppercase uppercase text-charcoal/70 hover:text-charcoal transition-colors tracking-[0.15em]" href="https://instagram.com/verro.walls" rel="noopener noreferrer" target="_blank">@verro.walls</a>
+      </nav>
+    </div>
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-space-sm pt-space-md border-t border-charcoal/15 font-space text-body-sm text-charcoal/70">
+      <p>© 2025 VÉRRO. ALL RIGHTS RESERVED.</p>
+      <div class="flex gap-space-md font-space font-medium text-label-meta uppercase tracking-[0.14em]">
+        <a class="hover:text-charcoal transition-colors" href="#">TERMS</a>
+<a class="hover:text-charcoal transition-colors" href="#">PRIVACY</a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+  <!-- YouPI Sovereign UPI Universal Checkout SDK -->
+  <script src="public/vendor/youpi.js"></script>
+
+  <!-- Client-side Application Orchestrator -->
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

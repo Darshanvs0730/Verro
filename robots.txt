@@ -1,0 +1,17 @@
+User-agent: *
+Allow: /$
+Allow: /index.html
+Allow: /public/images/
+Disallow: /backend/
+Disallow: /storage/
+Disallow: /tests/
+Disallow: /src/
+Disallow: /node_modules/
+Disallow: /*.md$
+Disallow: /*.json$
+Disallow: /*.sqlite*
+Disallow: /*.env*
+Disallow: /*.zip$
+Disallow: /build.js
+Disallow: /code.html
+Disallow: /screen.png

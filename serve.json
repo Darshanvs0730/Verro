@@ -1,0 +1,63 @@
+{
+  "cleanUrls": true,
+  "directoryListing": false,
+  "symlinks": false,
+  "headers": [
+    {
+      "source": "**",
+      "headers": [
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
+        { "key": "Permissions-Policy", "value": "camera=(), microphone=(), geolocation=(), payment=()" },
+        { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; connect-src 'self' http://127.0.0.1:4000 http://localhost:4000; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+        }
+      ]
+    }
+  ],
+  "redirects": [
+    { "source": "/backend/:path*", "destination": "/", "type": 302 },
+    { "source": "/storage/:path*", "destination": "/", "type": 302 },
+    { "source": "/tests/:path*.html", "destination": "/", "type": 302 },
+    { "source": "/tests/:path*.js", "destination": "/", "type": 302 },
+    { "source": "/tests/:path*.css", "destination": "/", "type": 302 },
+    { "source": "/node_modules/:path*.html", "destination": "/", "type": 302 },
+    { "source": "/node_modules/:path*.js", "destination": "/", "type": 302 },
+    { "source": "/node_modules/:path*.css", "destination": "/", "type": 302 },
+    { "source": "/.git/:path*", "destination": "/", "type": 302 },
+    { "source": "/**/private_masters/:path*", "destination": "/", "type": 302 },
+    { "source": "/**/*.md", "destination": "/", "type": 302 },
+    { "source": "/**/*.json", "destination": "/", "type": 302 },
+    { "source": "/**/*.sqlite*", "destination": "/", "type": 302 },
+    { "source": "/**/.*env*", "destination": "/", "type": 302 },
+    { "source": "/**/*.bak", "destination": "/", "type": 302 },
+    { "source": "/**/*.log", "destination": "/", "type": 302 },
+    { "source": "/build.js", "destination": "/", "type": 302 },
+    { "source": "//**/.*", "destination": "/", "type": 302 },
+    { "source": "/screen.png", "destination": "/", "type": 302 }
+  ],
+  "unlisted": [
+    "backend/**",
+    "storage/**",
+    "tests/**",
+    "src/**",
+    "node_modules/**",
+    ".git/**",
+    "*.md",
+    "*.json",
+    "*.sqlite",
+    "*.sqlite-shm",
+    "*.sqlite-wal",
+    "*.zip",
+    "*.tar",
+    "*.gz",
+    "*.rar",
+    "*.7z",
+    "build.js",
+    "code.html",
+    "screen.png"
+  ]
+}

@@ -1,0 +1,33 @@
+# VÉRRO — repository ignore rules
+node_modules/
+.DS_Store
+*.log
+
+# ---- Secrets: never commit credentials ----
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# ---- Live commerce data: SQLite database and its WAL/SHM sidecars ----
+# A byte copy of the main file alone is NOT a valid backup under WAL, and the live
+# database holds real customer orders, so it must never enter version control.
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+
+# ---- Paid product payloads (private master archives) ----
+backend/storage/private_masters/*
+!backend/storage/private_masters/.gitkeep
+
+# ---- Generated QA evidence (backups, screenshots, reports written by test runs) ----
+qa-artifacts/
+tests/screenshots/
+
+# Served as an unlisted static asset by serve.json, not part of the source.
+screen.png

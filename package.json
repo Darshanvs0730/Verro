@@ -1,0 +1,32 @@
+{
+  "name": "verro-digital-art-gallery",
+  "version": "1.0.0",
+  "description": "VÉRRO — Curated Digital Wallpapers for the Unordinary (Vol. 01)",
+  "type": "module",
+  "scripts": {
+    "build": "node build.js",
+    "dev": "npx -y serve . -l 4173",
+    "preview": "npx -y serve . -l 4173",
+    "dev:backend": "npm --prefix backend run dev",
+    "test": "node tests/validate-architecture.js",
+    "test:backend": "npm --prefix backend test",
+    "test:e2e": "node tests/e2e-commerce.test.js",
+    "test:viewport": "node tests/viewport-test.js"
+  },
+  "keywords": [
+    "verro",
+    "digital-art-gallery",
+    "wallpapers",
+    "curated",
+    "monograph"
+  ],
+  "author": "VÉRRO Atelier",
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  },
+  "dependencies": {
+    "qrcode": "^1.5.4"
+  }
+}

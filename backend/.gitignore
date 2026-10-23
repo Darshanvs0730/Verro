@@ -1,0 +1,16 @@
+node_modules
+dist
+.env
+*.sqlite
+*.sqlite3
+*.sqlite-journal
+*.sqlite3-journal
+# SQLite WAL sidecars (the *.sqlite glob above does not match *.sqlite-wal / *.sqlite-shm),
+# so the throwaway databases created by the test suites stay out of version control.
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+storage/private_masters/*.zip
+storage/private_masters/*.png
+storage/private_masters/*.jpg

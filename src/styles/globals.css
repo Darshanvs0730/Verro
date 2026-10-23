@@ -1,0 +1,88 @@
+/**
+ * VÉRRO Digital Art Gallery — Global Styles & Architectural Rules
+ */
+
+@layer base {
+  html, body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+    background-color: var(--color-ivory);
+    color: var(--color-charcoal);
+  }
+  body {
+    overscroll-behavior: none;
+  }
+  main > :first-child { margin-top: 0 !important; }
+  main > :last-child { margin-bottom: 0 !important; }
+}
+
+::-webkit-scrollbar { display: none; }
+
+/* Strict architectural zero-radius policy across all structural containers */
+*, *::before, *::after {
+  border-radius: 0;
+}
+
+/* Deliberate exception: circular indicator and live status dots */
+.rounded-full {
+  border-radius: 9999px !important;
+}
+
+/* Two-State Interactive Collection Card Reveal */
+.interactive-card.is-active .active-in-situ {
+  opacity: 1 !important;
+}
+
+/* Dedicated Typography Hierarchy */
+.font-bodoni {
+  font-family: 'Bodoni Moda', Georgia, serif;
+  font-optical-sizing: auto;
+}
+.font-space {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+.font-mono-archival {
+  font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-feature-settings: "zero" 1;
+}
+
+/* Fluid responsive typography scaling */
+.hero-heading {
+  font-size: clamp(2.15rem, 1.25rem + 3.75vw, 4.5rem);
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+}
+.editorial-heading {
+  font-size: clamp(2rem, 1.2rem + 3.25vw, 4.25rem);
+  line-height: 1.08;
+  letter-spacing: -0.015em;
+}
+.section-heading-lg {
+  font-size: clamp(1.75rem, 1.2rem + 2.2vw, 3rem);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.section-heading-md {
+  font-size: clamp(1.35rem, 1rem + 1.2vw, 2rem);
+  line-height: 1.25;
+  letter-spacing: 0em;
+}
+.price-fluid {
+  font-size: clamp(1.75rem, 1.4rem + 1vw, 2.25rem);
+  line-height: 1;
+}
+
+/* Architectural Image Fallback Frame */
+.verro-asset-fallback {
+  background-color: var(--color-parchment);
+  background-image: radial-gradient(rgba(23, 23, 23, 0.08) 1px, transparent 0);
+  background-size: 16px 16px;
+}
+
+/* Visible refined focus state for keyboard accessibility */
+a:focus-visible, button:focus-visible {
+  outline: 2px solid var(--color-gold);
+  outline-offset: 2px;
+}
+
