@@ -28,6 +28,7 @@ backend/storage/private_masters/*
 # ---- Generated QA evidence (backups, screenshots, reports written by test runs) ----
 qa-artifacts/
 tests/screenshots/
+tests/*.png
 
 # Served as an unlisted static asset by serve.json, not part of the source.
 screen.png

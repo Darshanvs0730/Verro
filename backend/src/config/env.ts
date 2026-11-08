@@ -12,8 +12,46 @@
 import dotenv from 'dotenv';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 
 dotenv.config();
+
+/**
+ * Repository layout, derived from THIS module's location instead of `process.cwd()` (F-44).
+ * `src/config/env.ts` -> `backend` -> repository root.
+ */
+export const BACKEND_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+export const REPO_ROOT = path.resolve(BACKEND_ROOT, '..');
+
+/** The development/production database. No test process may ever open this file. */
+export const LIVE_DATABASE_PATH = path.join(BACKEND_ROOT, 'verro_commerce.sqlite');
+
+export type DatabaseSource = 'absolute' | 'relative-resolved' | 'default';
+
+/**
+ * F-44 root cause. A RELATIVE `DATABASE_URL` used to be handed to better-sqlite3 verbatim, so
+ * SQLite resolved it against `process.cwd()`: `backend/.env` ships exactly such a value, which
+ * meant `npm --prefix backend run ...` opened the developer database while the same code started
+ * from the repository root silently created an unrelated, empty one.
+ *
+ * Relative values are now resolved against the backend package root — deterministic and cwd
+ * independent — and that absolute path is what the driver opens. Whether the target is ALLOWED
+ * for the current `NODE_ENV` is a separate, fail-closed decision taken by
+ * `evaluateDatabaseIsolation()` from `config/databaseIsolation.ts` inside `getDatabase()`.
+ */
+export function resolveDatabaseTarget(rawValue: string | undefined): { path: string; source: DatabaseSource } {
+  const raw = rawValue?.trim();
+
+  if (!raw) {
+    return { path: LIVE_DATABASE_PATH, source: 'default' };
+  }
+  if (path.isAbsolute(raw)) {
+    return { path: path.normalize(raw), source: 'absolute' };
+  }
+  return { path: path.resolve(BACKEND_ROOT, raw), source: 'relative-resolved' };
+}
+
+const DATABASE_TARGET = resolveDatabaseTarget(process.env.DATABASE_URL);
 
 /** Publicly documented development constants — must never be trusted. */
 export const LEGACY_DEV_DOWNLOAD_SECRET = 'verro_atelier_dev_secret_download_key_32_bytes';
@@ -28,7 +66,13 @@ export const MIN_SECRET_LENGTH = 32;
  */
 export const MIN_TEST_FIXTURE_TOKEN_LENGTH = 16;
 
-export type SecretStatus = 'configured' | 'ephemeral' | 'legacy-value' | 'too-short' | 'missing-in-production';
+export type SecretStatus =
+  | 'configured'
+  | 'ephemeral'
+  | 'legacy-value'
+  | 'too-short'
+  | 'development-default'
+  | 'missing-in-production';
 
 export interface SecretDiagnostic {
   name: string;
@@ -44,6 +88,16 @@ export interface EnvironmentConfig {
   host: string;
   corsOrigin: string;
   databaseUrl: string;
+  /** How `databaseUrl` was derived. `default`/`relative-resolved` is surfaced as a warning (F-44). */
+  databaseSource: DatabaseSource;
+  /** Absolute `<repo>/backend`, resolved without consulting `process.cwd()`. */
+  backendRoot: string;
+  /** Absolute repository root. A test process may never write inside this tree. */
+  repoRoot: string;
+  /** The developer/production database that no test run may ever open. */
+  liveDatabasePath: string;
+  /** Directory a test run may place its throwaway database in (defaults to `os.tmpdir()`). */
+  testDatabaseDir?: string;
   privateStoragePath: string;
   downloadTokenSecret: string;
   downloadTokenTtlMinutes: number;
@@ -52,7 +106,14 @@ export interface EnvironmentConfig {
   paymentGatewayBaseUrl?: string;
   paymentGatewaySecret?: string;
   paymentGatewayMerchantId?: string;
-  paymentGatewayMerchantVpa?: string;
+  /**
+   * F-46: always defined (development falls back to a documented development value), but the
+   * fallback is marked in `secretDiagnostics` and production refuses to boot without an explicit
+   * value — a wrong payee silently misroutes real settlement.
+   */
+  paymentGatewayMerchantVpa: string;
+  /** F-46: payee display name published with the VPA in the UPI intent. Same fail-closed rule. */
+  paymentGatewayMerchantName: string;
   paymentGatewayPortalUrl?: string;
   paymentGatewayReturnUrl?: string;
   webhookSecret: string;
@@ -117,6 +178,54 @@ function resolveSecret(
   };
 }
 
+/**
+ * F-46 — the merchant payment identity.
+ *
+ * The UPI VPA and the payee name are not secrets, but they decide WHERE A CUSTOMER'S MONEY GOES.
+ * They used to be silent fallbacks: `env.ts` defaulted the VPA to a developer address, the YouPI
+ * adapter defaulted it again, and the payee name was a literal in the adapter with no
+ * configuration at all. In production, a missing `PAYMENT_GATEWAY_MERCHANT_VPA` therefore
+ * produced payment intents pointing at the developer's personal UPI ID, with no error anywhere —
+ * every settlement would have gone to the wrong payee and the order would still read `paid`.
+ *
+ * Both values now flow through `secretDiagnostics`, so the existing fail-closed boot check
+ * (`verifyRuntimeSecrets`) refuses to start production without them.
+ */
+export const DEVELOPMENT_MERCHANT_VPA = 'dvs2004@slc';
+export const DEVELOPMENT_MERCHANT_NAME = 'Darshan V Sunkanur';
+
+/** Never log or report a full payment identifier; the posture lines stay truncated. */
+function maskMerchantIdentifier(value: string): string {
+  return value.length <= 3 ? '***' : `${value.slice(0, 3)}****`;
+}
+
+function resolveMerchantIdentity(
+  rawValue: string | undefined,
+  name: string,
+  developmentFallback: string,
+  isProd: boolean
+): { value: string; diagnostic: SecretDiagnostic } {
+  const trimmed = rawValue?.trim();
+
+  if (trimmed && trimmed.length > 0) {
+    return {
+      value: trimmed,
+      diagnostic: { name, status: 'configured', message: `${name} is explicitly configured.` }
+    };
+  }
+
+  return {
+    value: developmentFallback,
+    diagnostic: {
+      name,
+      status: isProd ? 'missing-in-production' : 'development-default',
+      message: isProd
+        ? `${name} is not set. Production must never fall back to the public development value (${maskMerchantIdentifier(developmentFallback)}).`
+        : `${name} is not set; using the documented development fallback (${maskMerchantIdentifier(developmentFallback)}).`
+    }
+  };
+}
+
 const nodeEnv = process.env.NODE_ENV || 'development';
 const isProduction = nodeEnv === 'production';
 const isTest = nodeEnv === 'test';
@@ -126,18 +235,36 @@ const downloadSecret = resolveSecret(process.env.DOWNLOAD_TOKEN_SECRET, 'DOWNLOA
 ]);
 const webhookSecret = resolveSecret(process.env.WEBHOOK_SECRET, 'WEBHOOK_SECRET');
 const gatewaySecret = resolveSecret(process.env.PAYMENT_GATEWAY_SECRET, 'PAYMENT_GATEWAY_SECRET');
+const merchantVpa = resolveMerchantIdentity(
+  process.env.PAYMENT_GATEWAY_MERCHANT_VPA,
+  'PAYMENT_GATEWAY_MERCHANT_VPA',
+  DEVELOPMENT_MERCHANT_VPA,
+  isProduction
+);
+const merchantName = resolveMerchantIdentity(
+  process.env.PAYMENT_GATEWAY_MERCHANT_NAME,
+  'PAYMENT_GATEWAY_MERCHANT_NAME',
+  DEVELOPMENT_MERCHANT_NAME,
+  isProduction
+);
 
 const secretDiagnostics: SecretDiagnostic[] = [
   downloadSecret.diagnostic,
   webhookSecret.diagnostic,
-  gatewaySecret.diagnostic
+  gatewaySecret.diagnostic,
+  merchantVpa.diagnostic,
+  merchantName.diagnostic
 ];
 
 if (isProduction) {
-  for (const name of ['DOWNLOAD_TOKEN_SECRET', 'WEBHOOK_SECRET', 'PAYMENT_GATEWAY_SECRET']) {
-    const diag = secretDiagnostics.find((d) => d.name === name);
-    if (diag && diag.status !== 'configured') {
-      diag.status = 'missing-in-production';
+  // Any diagnostic that is not `configured` is fatal in production, whatever the reason
+  // (ephemeral, a published legacy literal, too short, missing, or a development default that was
+  // never replaced). Listing the names explicitly made this easy to forget when a new
+  // production-critical value was added — which is precisely what happened to the merchant
+  // identity (F-46).
+  for (const diagnostic of secretDiagnostics) {
+    if (diagnostic.status !== 'configured') {
+      diagnostic.status = 'missing-in-production';
     }
   }
 }
@@ -173,7 +300,12 @@ export const env: EnvironmentConfig = {
   port: parseInt(process.env.PORT || '4000', 10),
   host: process.env.HOST || '127.0.0.1',
   corsOrigin: process.env.CORS_ORIGIN || 'http://localhost:4173',
-  databaseUrl: process.env.DATABASE_URL || path.resolve(process.cwd(), 'verro_commerce.sqlite'),
+  databaseUrl: DATABASE_TARGET.path,
+  databaseSource: DATABASE_TARGET.source,
+  backendRoot: BACKEND_ROOT,
+  repoRoot: REPO_ROOT,
+  liveDatabasePath: LIVE_DATABASE_PATH,
+  testDatabaseDir: process.env.VERRO_TEST_DB_DIR?.trim() || undefined,
   privateStoragePath: process.env.PRIVATE_STORAGE_PATH || path.resolve(process.cwd(), 'storage/private_masters'),
   downloadTokenSecret: downloadSecret.value,
   downloadTokenTtlMinutes: parseInt(process.env.DOWNLOAD_TOKEN_TTL_MINUTES || '15', 10),
@@ -185,7 +317,8 @@ export const env: EnvironmentConfig = {
   paymentGatewayBaseUrl: process.env.PAYMENT_GATEWAY_BASE_URL,
   paymentGatewaySecret: process.env.PAYMENT_GATEWAY_SECRET,
   paymentGatewayMerchantId: process.env.PAYMENT_GATEWAY_MERCHANT_ID,
-  paymentGatewayMerchantVpa: process.env.PAYMENT_GATEWAY_MERCHANT_VPA || 'dvs2004@slc',
+  paymentGatewayMerchantVpa: merchantVpa.value,
+  paymentGatewayMerchantName: merchantName.value,
   paymentGatewayPortalUrl: process.env.PAYMENT_GATEWAY_PORTAL_URL || 'http://localhost:7000',
   paymentGatewayReturnUrl: process.env.PAYMENT_GATEWAY_RETURN_URL,
   webhookSecret: webhookSecret.value,
@@ -204,6 +337,18 @@ export const env: EnvironmentConfig = {
   trustProxyHops: resolveTrustProxyHops(process.env.TRUST_PROXY_HOPS, 0, 10),
   secretDiagnostics
 };
+
+/**
+ * F-44: make the resolution visible. A relative `DATABASE_URL` is no longer a silent,
+ * cwd-dependent coin flip, but the operator should still know which file was chosen.
+ */
+if (env.databaseSource !== 'absolute') {
+  console.warn(
+    `[VÉRRO env] DATABASE_URL was ${
+      env.databaseSource === 'default' ? 'not set' : 'relative'
+    }; resolved against the backend package root to ${env.databaseUrl}.`
+  );
+}
 
 if (enableTestRoutesFlag && !env.testRoutesEnabled) {
   const reason = !isTest
@@ -242,9 +387,12 @@ export function verifyRuntimeSecrets(): void {
   }
 }
 
-/**
- * Secret posture report surfaced by the /health diagnostics endpoint.
- */
-export function getSecretPosture(): Array<{ name: string; status: SecretStatus }> {
-  return env.secretDiagnostics.map((d) => ({ name: d.name, status: d.status }));
-}
+// F-47: `getSecretPosture()` used to be exported and returned from the unauthenticated `/health`
+// endpoint. It never exposed a secret VALUE, but it published which secrets were missing,
+// short, legacy or ephemeral. That is a free reconnaissance oracle for anyone who can reach the
+// port: it says whether webhook signing is running on an ephemeral key, and which deployments are
+// misconfigured — before an attacker spends a single request probing for the consequences.
+//
+// The posture is still reported, but only where an operator sees it: `verifyRuntimeSecrets()`
+// logs the full block at boot and throws in production. Nothing about it belongs on a public
+// endpoint, so the accessor is gone entirely rather than merely unplumbed.

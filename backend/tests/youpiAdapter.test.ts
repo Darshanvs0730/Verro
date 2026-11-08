@@ -11,6 +11,9 @@
  * 7. Checkout session retrieval endpoint (POST /api/v1/orders/:orderId/checkout)
  */
 
+// F-44: this bootstrap MUST come first. Without it the suite resolved DATABASE_URL to the
+// developer database (backend/verro_commerce.sqlite) and wrote seeded orders into live local data.
+import './testEnvSetup.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -26,6 +29,9 @@ import { env, LEGACY_DEV_WEBHOOK_SIGNATURE } from '../src/config/env.js';
 // Setup isolated test webhook secret and mock YouPI server
 const TEST_WEBHOOK_SECRET = 'youpi_test_webhook_secret_32_characters_minimum_len';
 const TEST_MERCHANT_ID = '00000000-0000-0000-0000-000000000001';
+// F-46/F-48: the adapter refuses to invent a payee identity, so the suite supplies an explicit one.
+const TEST_PAYEE_VPA = 'verro.suite@slc';
+const TEST_PAYEE_NAME = 'VÉRRO Suite Payee';
 
 test('YouPI-PG Payment Gateway Integration Suite', async (t) => {
   let mockYouPiServer: http.Server;
@@ -135,6 +141,8 @@ test('YouPI-PG Payment Gateway Integration Suite', async (t) => {
     apiUrl: `http://127.0.0.1:${mockPort}`,
     portalUrl: 'http://localhost:7000',
     merchantId: TEST_MERCHANT_ID,
+    payeeVpa: TEST_PAYEE_VPA,
+    payeeName: TEST_PAYEE_NAME,
     webhookSecret: TEST_WEBHOOK_SECRET,
     returnUrl: 'http://localhost:4173/#order-success'
   });
@@ -300,8 +308,9 @@ test('YouPI-PG Payment Gateway Integration Suite', async (t) => {
   });
 
   // Test 6: POST /api/v1/orders/:orderId/checkout endpoint
-  await t.test('6. POST /api/v1/orders/:orderId/checkout returns payment session for pending order', async () => {
+  await t.test('6. POST /api/v1/orders/:orderId/checkout issues a session to the PURCHASER only (F-22)', async () => {
     const orderId = `ord_verro_chk_${Date.now()}`;
+    const customerToken = `cst_chk_${crypto.randomBytes(16).toString('hex')}`;
     const dummy: OrderRecord = {
       id: orderId,
       product_id: 'vol-01',
@@ -311,7 +320,7 @@ test('YouPI-PG Payment Gateway Integration Suite', async (t) => {
       customer_email: 'buyer@example.com',
       payment_reference: null,
       idempotency_key: null,
-      customer_token_hash: null,
+      customer_token_hash: crypto.createHash('sha256').update(customerToken).digest('hex'),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       paid_at: null,
@@ -319,25 +328,44 @@ test('YouPI-PG Payment Gateway Integration Suite', async (t) => {
     };
     orderRepository.create(dummy);
 
-    const res = await request(app).post(`/api/v1/orders/${orderId}/checkout`);
+    // F-22: an ANONYMOUS caller must not be able to mint a payment session for this order.
+    // This is the pre-fix behaviour that used to succeed.
+    const anonymous = await request(app).post(`/api/v1/orders/${orderId}/checkout`);
+    assert.equal(anonymous.status, 403, 'Session creation must be purchaser-scoped');
+    assert.equal(anonymous.body.sessionId, undefined, 'No session may be issued to an anonymous caller');
+
+    const res = await request(app)
+      .post(`/api/v1/orders/${orderId}/checkout`)
+      .set('Authorization', `Bearer ${customerToken}`);
     assert.equal(res.status, 200);
     assert.equal(res.body.orderId, orderId);
     assert.ok(res.body.checkoutUrl.includes('checkout/c7942127-14e3-469a-9e4a-9359a16f903a'));
+
+    // F-20: the gateway-issued session id is persisted server-side for later reconciliation,
+    // so no client-supplied identifier is ever needed (or accepted).
+    assert.equal(
+      orderRepository.findById(orderId)?.payment_session_id,
+      'c7942127-14e3-469a-9e4a-9359a16f903a',
+      'The server must persist the gateway session id'
+    );
   });
 
   // Test 7: POST /api/v1/orders/:orderId/verify endpoint
-  await t.test('7. POST /api/v1/orders/:orderId/verify reconciles payment with YouPI server', async () => {
+  await t.test('7. POST /api/v1/orders/:orderId/verify settles via the SERVER session for the purchaser only (F-03/F-05/F-20)', async () => {
     const orderId = `ord_verro_rec_${Date.now()}`;
+    const customerToken = `cst_rec_${crypto.randomBytes(16).toString('hex')}`;
     const dummy: OrderRecord = {
       id: orderId,
       product_id: 'vol-01',
       amount: 39900,
       currency: 'INR',
-      status: 'pending',
+      status: 'payment_pending',
       customer_email: 'reconcile@example.com',
-      payment_reference: 'paid_youpi_session',
+      payment_reference: null,
       idempotency_key: null,
-      customer_token_hash: null,
+      customer_token_hash: crypto.createHash('sha256').update(customerToken).digest('hex'),
+      // Server-persisted gateway session (F-20). The mock gateway answers SUCCESS for it.
+      payment_session_id: 'paid_youpi_session',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
       paid_at: null,
@@ -345,11 +373,59 @@ test('YouPI-PG Payment Gateway Integration Suite', async (t) => {
     };
     orderRepository.create(dummy);
 
-    const verifyRes = await request(app).post(`/api/v1/orders/${orderId}/verify`);
+    // F-03: reconciliation without a purchaser token is refused outright. This is exactly
+    // the request that used to settle someone else's order (and leak its reference).
+    const anonymous = await request(app).post(`/api/v1/orders/${orderId}/verify`);
+    assert.equal(anonymous.status, 403, 'Reconciliation must be purchaser-scoped');
+    assert.equal(anonymous.body.paymentReference, undefined, 'No reference may leak to an anonymous caller');
+    assert.equal(orderRepository.findById(orderId)?.status, 'payment_pending', 'State must be untouched');
+
+    const verifyRes = await request(app)
+      .post(`/api/v1/orders/${orderId}/verify`)
+      .set('Authorization', `Bearer ${customerToken}`);
     assert.equal(verifyRes.status, 200);
     assert.equal(verifyRes.body.status, 'paid');
+    assert.equal(verifyRes.body.settled, true, 'The gateway-authenticated session must settle the order');
 
     const confirmed = orderRepository.findById(orderId);
     assert.equal(confirmed?.status, 'paid');
+    assert.equal(confirmed?.payment_reference, 'paid_youpi_session');
+  });
+
+  // Test 8: a purchaser claim can never settle an order on its own (F-05)
+  await t.test('8. POST /api/v1/orders/:orderId/verify records a purchaser claim but never trusts it (F-05)', async () => {
+    const orderId = `ord_verro_claim_${Date.now()}`;
+    const customerToken = `cst_claim_${crypto.randomBytes(16).toString('hex')}`;
+    const dummy: OrderRecord = {
+      id: orderId,
+      product_id: 'vol-01',
+      amount: 39900,
+      currency: 'INR',
+      status: 'payment_pending',
+      customer_email: 'claim@example.com',
+      payment_reference: null,
+      idempotency_key: null,
+      customer_token_hash: crypto.createHash('sha256').update(customerToken).digest('hex'),
+      // The mock gateway reports ACTIVE (never settled) for this session.
+      payment_session_id: 'active_youpi_session',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      paid_at: null,
+      fulfilled_at: null
+    };
+    orderRepository.create(dummy);
+
+    const res = await request(app)
+      .post(`/api/v1/orders/${orderId}/verify`)
+      .set('Authorization', `Bearer ${customerToken}`)
+      .send({ paymentReference: '412345678901' });
+
+    assert.equal(res.status, 200);
+    assert.equal(res.body.settled, false, 'A client-supplied reference must never settle an order');
+    assert.equal(res.body.status, 'payment_pending');
+
+    const unchanged = orderRepository.findById(orderId);
+    assert.equal(unchanged?.status, 'payment_pending', 'Order state must remain untouched');
+    assert.equal(unchanged?.payment_reference, null, 'An unverified claim must never become the payment reference');
   });
 });

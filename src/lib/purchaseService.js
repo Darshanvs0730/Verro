@@ -21,6 +21,82 @@ const GATEWAY_CONFIG = {
 
 import { openPaymentModal } from '../components/PaymentModal.js';
 
+/** sessionStorage key holding the in-flight purchase so a refresh can resume it. */
+const ACTIVE_PURCHASE_KEY = 'verro_active_purchase';
+
+/**
+ * A resumed purchase is only honoured for 30 minutes (refresh/interruption-safety).
+ *
+ * Anything older is stale: the order may still exist server-side, but silently resuming an
+ * ancient checkout is more confusing than starting a fresh one, and an idempotency key must
+ * never be reused indefinitely.
+ */
+const ACTIVE_PURCHASE_TTL_MS = 30 * 60 * 1000;
+
+/**
+ * Origins allowed to drive the embedded checkout iframe via postMessage.
+ *
+ * The previous handler acted on ANY message that happened to carry a `youpi.payment_success`
+ * event name, so anything holding a window reference — a cross-origin iframe, an embedded
+ * widget, an opener — could steer the storefront into "settling" a purchase. Settlement is
+ * re-verified server-side now, but the message surface is restricted as well.
+ */
+function resolveCheckoutOrigins() {
+  const origins = new Set();
+
+  const add = (value) => {
+    try {
+      if (value) origins.add(new URL(value, window.location.href).origin);
+    } catch {
+      // Ignore malformed configuration rather than trusting it.
+    }
+  };
+
+  if (typeof window !== 'undefined') {
+    add(GATEWAY_CONFIG.apiBaseUrl);
+    add(window.__VERRO_YOUPI_URL__);
+    add(window.__VERRO_YOUPI_ORIGIN__);
+    add(window.location.href);
+    ['http://localhost:7000', 'http://127.0.0.1:7000'].forEach(add);
+  }
+
+  return origins;
+}
+
+/**
+ * F-42: opaque client-side identifiers (idempotency keys) must come from a CSPRNG.
+ *
+ * `Math.random()` is not cryptographically secure and is seedable/predictable, which matters
+ * for the idempotency key: whoever presents a key first owns the stored response for it. The
+ * fallback still mixes timestamp + counter so it cannot collide, and is only reached in
+ * environments without WebCrypto.
+ */
+let opaqueCounter = 0;
+function generateOpaqueId(prefix) {
+  if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+    const bytes = crypto.getRandomValues(new Uint8Array(16));
+    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+    return `${prefix}_${hex}`;
+  }
+  opaqueCounter += 1;
+  return `${prefix}_${Date.now()}_${opaqueCounter}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/**
+ * F-42: server-provided strings are rendered into the storefront chrome, so never trust them
+ * as markup. Escaping at the single interpolation point is cheaper to audit than escaping at
+ * every call site.
+ */
+function escapeHtml(value) {
+  return String(value == null ? '' : value).replace(/[&<>"']/g, (char) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[char]));
+}
+
 /**
  * Validated Commerce Lifecycle State Model
  * Supported by backend and storefront
@@ -68,6 +144,37 @@ export const purchaseService = {
       return this._inflightPromise;
     }
 
+    // Refresh / interruption recovery: rebuild the in-flight purchase from sessionStorage
+    // BEFORE creating anything, so reloading mid-payment resumes the SAME order instead of
+    // minting a second one for the same buyer.
+    if (!this.currentOrder || this.currentState === 'idle') {
+      const restored = this.restoreActivePurchase();
+      if (restored) {
+        this.currentOrder = {
+          orderId: restored.orderId,
+          productId: restored.productId,
+          amount: restored.amount,
+          currency: restored.currency,
+          status: restored.status,
+          customerAccessToken: restored.customerAccessToken
+        };
+        this.currentState = 'payment_pending';
+        // Reusing the persisted key means any retry replays the same order server-side
+        // rather than creating a parallel one.
+        this.activeIdempotencyKey = restored.idempotencyKey || null;
+
+        console.info(`[VÉRRO Commerce] Resumed in-flight purchase "${restored.orderId}" after interruption.`);
+        this.notifyStateChange(this.currentState, this.currentOrder);
+        this.updateStorefrontCta(this.currentState, this.currentOrder);
+        this.displayArchivalToast(`RESUMED ORDER #${restored.orderId} · PAYMENT PENDING`);
+
+        if (typeof window !== 'undefined' && !window.__E2E_TEST_ENV__) {
+          this.openPaymentModal(this.currentOrder);
+        }
+        return this.getOrderStatus(restored.orderId, restored.customerAccessToken);
+      }
+    }
+
     // If an order is already in payment_pending, check its authoritative status and re-open modal
     if (this.currentState === 'payment_pending' && this.currentOrder) {
       console.info(`[VÉRRO Commerce] Checking authoritative status for existing order "${this.currentOrder.orderId}"...`);
@@ -79,7 +186,7 @@ export const purchaseService = {
 
     // Generate or maintain idempotency key for this checkout attempt
     if (!this.activeIdempotencyKey) {
-      this.activeIdempotencyKey = `ik_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      this.activeIdempotencyKey = generateOpaqueId('ik');
     }
 
     this._inflightPromise = (async () => {
@@ -132,6 +239,9 @@ export const purchaseService = {
 
         // Step 3: Store authoritative backend order details
         this.currentOrder = orderData;
+        // Refresh-safety: remember the order, its purchaser token and the idempotency key
+        // that claimed it, so an interrupted checkout resumes instead of duplicating.
+        this.persistActivePurchase(orderData, this.activeIdempotencyKey);
         this.activeIdempotencyKey = null; // Reset for next logical attempt
 
         // Step 4: Authoritative state transition based on backend response
@@ -216,10 +326,18 @@ export const purchaseService = {
       if (statusData.status === 'paid') {
         this.currentState = 'paid';
         this.currentOrder = { ...this.currentOrder, ...statusData };
+        // Settled for good: the interrupted-purchase slot has done its job.
+        this.clearActivePurchase();
         this.displayArchivalToast(`ORDER #${targetOrderId} VERIFIED PAID · MASTER ARCHIVE AVAILABLE`);
-      } else if (statusData.status === 'cancelled') {
-        this.currentState = 'cancelled';
-        this.displayArchivalToast(`ORDER #${targetOrderId} CANCELLED`);
+      } else if (statusData.status === 'cancelled' || statusData.status === 'expired' || statusData.status === 'failed') {
+        // Terminal and non-payable: resuming would only replay a dead order, so retire the
+        // slot (and the bearer token stored alongside it) instead of leaving it to expire.
+        // 'expired' collapses onto the storefront's 'cancelled' presentation state — the CTA
+        // renderer has no dedicated expired branch and must never silently skip the update.
+        this.currentState = statusData.status === 'expired' ? 'cancelled' : statusData.status;
+        this.currentOrder = { ...this.currentOrder, ...statusData };
+        this.clearActivePurchase();
+        this.displayArchivalToast(`ORDER #${targetOrderId} ${String(statusData.status).toUpperCase()}`);
       } else {
         this.currentState = 'payment_pending';
         this.displayArchivalToast(`ORDER #${targetOrderId} STATUS: PAYMENT PENDING`);
@@ -232,6 +350,91 @@ export const purchaseService = {
     } catch (err) {
       console.error('[VÉRRO Order Status Error]:', err.message);
       throw err;
+    }
+  },
+
+  /**
+   * Derive the purchaser access token for an order from memory or the resumed session.
+   *
+   * The token is issued once, at order creation, and is required for every purchaser-scoped
+   * operation now (reconciliation, checkout, download). Keeping the lookup in one place is
+   * what stops an endpoint from silently going unauthenticated again.
+   */
+  getPurchaserToken(orderId) {
+    if (this.currentOrder && (!orderId || this.currentOrder.orderId === orderId)) {
+      return this.currentOrder.customerAccessToken || null;
+    }
+    const restored = this.restoreActivePurchase();
+    if (restored && (!orderId || restored.orderId === orderId)) {
+      return restored.customerAccessToken || null;
+    }
+    return null;
+  },
+
+  /**
+   * Persist the in-flight purchase so an interrupted checkout survives a refresh.
+   *
+   * Stored in sessionStorage (per-tab, cleared when the tab closes) because the purchaser
+   * access token is a bearer credential and must never outlive the browsing session.
+   */
+  persistActivePurchase(order, idempotencyKey) {
+    if (typeof window === 'undefined' || !window.sessionStorage || !order || !order.orderId) return;
+
+    try {
+      window.sessionStorage.setItem(
+        ACTIVE_PURCHASE_KEY,
+        JSON.stringify({
+          orderId: order.orderId,
+          productId: order.productId || order.product_id || null,
+          amount: order.amount ?? null,
+          currency: order.currency || null,
+          status: order.status || 'payment_pending',
+          customerAccessToken: order.customerAccessToken || null,
+          idempotencyKey: idempotencyKey || null,
+          createdAt: Date.now()
+        })
+      );
+    } catch {
+      // Private-browsing / storage-disabled: recovery is a convenience, never a requirement.
+    }
+  },
+
+  /**
+   * Read back a live in-flight purchase (or null when absent, malformed or older than 30min).
+   */
+  restoreActivePurchase() {
+    if (typeof window === 'undefined' || !window.sessionStorage) return null;
+
+    try {
+      const raw = window.sessionStorage.getItem(ACTIVE_PURCHASE_KEY);
+      if (!raw) return null;
+
+      const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== 'object' || typeof parsed.orderId !== 'string') {
+        window.sessionStorage.removeItem(ACTIVE_PURCHASE_KEY);
+        return null;
+      }
+
+      const age = Date.now() - Number(parsed.createdAt || 0);
+      if (!Number.isFinite(age) || age > ACTIVE_PURCHASE_TTL_MS) {
+        // Stale: drop it so a fresh checkout gets its own order and its own key.
+        window.sessionStorage.removeItem(ACTIVE_PURCHASE_KEY);
+        return null;
+      }
+
+      return parsed;
+    } catch {
+      return null;
+    }
+  },
+
+  /** Forget the in-flight purchase once it is settled, cancelled or abandoned. */
+  clearActivePurchase() {
+    if (typeof window === 'undefined' || !window.sessionStorage) return;
+    try {
+      window.sessionStorage.removeItem(ACTIVE_PURCHASE_KEY);
+    } catch {
+      // Nothing to clear.
     }
   },
 
@@ -383,7 +586,7 @@ export const purchaseService = {
 
     toastEl.innerHTML = `
       <span class="w-2 h-2 bg-gold flex-shrink-0"></span>
-      <span class="leading-tight">${message}</span>
+      <span class="leading-tight">${escapeHtml(message)}</span>
     `;
     toastEl.style.opacity = '1';
     toastEl.style.display = 'flex';
@@ -495,6 +698,18 @@ export const purchaseService = {
     document.getElementById('verro-youpi-close-btn')?.addEventListener('click', closeModal);
 
     const messageHandler = (e) => {
+      // Only the configured checkout origins may drive this flow, and only the exact frame
+      // we embedded is allowed to speak for it (F-2x).
+      const allowedOrigins = resolveCheckoutOrigins();
+      if (allowedOrigins.size > 0 && !allowedOrigins.has(e.origin)) {
+        console.warn(`[VÉRRO Commerce] Ignored checkout message from untrusted origin: ${e.origin}`);
+        return;
+      }
+      if (iframe.contentWindow && e.source && e.source !== iframe.contentWindow) {
+        console.warn('[VÉRRO Commerce] Ignored checkout message from an unexpected window.');
+        return;
+      }
+
       if (!e.data || typeof e.data !== 'object') return;
       const eventName = e.data.event;
       if (eventName === 'youpi.payment_success' || eventName === 'youpi:payment:success') {
@@ -518,30 +733,50 @@ export const purchaseService = {
     const targetOrderId = orderId || this.currentOrder?.orderId;
     if (!targetOrderId) return;
 
+    // F-03: reconciliation is purchaser-scoped. The previous call sent no credential at all,
+    // which (pre-fix) settled any order whose id it knew and now correctly returns 403.
+    const purchaserToken = this.getPurchaserToken(targetOrderId);
+
     try {
+      const headers = { 'Content-Type': 'application/json' };
+      if (purchaserToken) {
+        headers['Authorization'] = `Bearer ${purchaserToken}`;
+      }
+
       const response = await fetch(`${GATEWAY_CONFIG.apiBaseUrl}/api/v1/orders/${targetOrderId}/verify`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
+        // The reference is a CLAIM the server records as unverified evidence; it never
+        // settles the order on its own (F-05).
         body: JSON.stringify({ paymentReference })
       });
+
       if (response.ok) {
         const data = await response.json();
-        if (data.status === 'paid') {
+
+        if (data.status === 'paid' && data.settled !== false) {
           this.currentState = 'paid';
           if (this.currentOrder) {
             this.currentOrder.status = 'paid';
             this.currentOrder.paidAt = data.paidAt;
           }
+          // The purchase is complete: the resumed-state slot must not linger.
+          this.clearActivePurchase();
           this.notifyStateChange(this.currentState, this.currentOrder);
           this.updateStorefrontCta(this.currentState, this.currentOrder);
           this.displayArchivalToast('PAYMENT SETTLED · MASTER ARCHIVE UNLOCKED');
           return data;
         }
+
+        if (data && data.settled === false) {
+          // Authoritative server answer: not settled. Say so instead of implying success.
+          this.displayArchivalToast('PAYMENT NOT YET CONFIRMED · ORDER REMAINS PENDING');
+        }
       }
-      return this.getOrderStatus(targetOrderId, this.currentOrder?.customerAccessToken);
+      return this.getOrderStatus(targetOrderId, purchaserToken);
     } catch (err) {
       console.warn('[VÉRRO Commerce] Settlement verification notice:', err.message);
-      return this.getOrderStatus(targetOrderId, this.currentOrder?.customerAccessToken);
+      return this.getOrderStatus(targetOrderId, purchaserToken);
     }
   }
 };

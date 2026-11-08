@@ -7,9 +7,17 @@ import crypto from 'node:crypto';
 import { orderRepository } from '../repositories/orderRepository.js';
 import { getAuthoritativeProduct } from '../config/catalog.js';
 import { CreateOrderInput, OrderRecord, OrderResponseDTO } from '../models/order.js';
+import { PAYMENT_REFERENCE_PATTERN, SYNTHETIC_PAYMENT_REFERENCES } from '../models/webhookIdentifiers.js';
 import { DevelopmentEmailService, EmailService } from './emailService.js';
 
 export class OrderService {
+  /**
+   * F-45: identical evidence bursts inside this window collapse into one audit row. Long
+   * enough to absorb a scripted probe, short enough that genuinely repeated customer actions
+   * (spaced by real UI interaction) still appear individually in the trail.
+   */
+  static readonly EVIDENCE_DEDUPE_WINDOW_MS = 60_000;
+
   private emailService: EmailService;
 
   constructor(emailService: EmailService = new DevelopmentEmailService()) {
@@ -101,6 +109,83 @@ export class OrderService {
   }
 
   /**
+   * Record a NON-settling reconciliation outcome or purchaser claim as evidence.
+   *
+   * F-03 / F-05: evidence never mutates order state, so an unauthorized attempt or an
+   * unverified UTR claim leaves a durable audit trail without ever becoming a settlement.
+   *
+   * F-45: the first occurrence of a distinct (order, outcome, source) triple is always kept,
+   * but an identical burst inside EVIDENCE_DEDUPE_WINDOW_MS collapses into that single row.
+   * Reconciliation is reachable anonymously with a forged token, so without this a scripted
+   * probe could append evidence rows without bound.
+   */
+  recordPaymentEvidence(
+    orderId: string,
+    outcome: string,
+    detail: string,
+    options: {
+      source?: 'purchaser_claim' | 'gateway_reconciliation';
+      paymentSessionId?: string | null;
+      paymentReference?: string | null;
+    } = {}
+  ): void {
+    const source = options.source ?? 'gateway_reconciliation';
+
+    // F-45: collapse identical bursts. Every DISTINCT outcome is still recorded once.
+    const windowStart = new Date(Date.now() - OrderService.EVIDENCE_DEDUPE_WINDOW_MS).toISOString();
+    if (orderRepository.countRecentPaymentAttempts(orderId, outcome, source, windowStart) > 0) {
+      return;
+    }
+
+    const order = orderRepository.findById(orderId);
+    orderRepository.recordPaymentAttempt({
+      orderId,
+      paymentSessionId: options.paymentSessionId ?? order?.payment_session_id ?? null,
+      paymentReference: options.paymentReference ?? null,
+      amount: null,
+      currency: null,
+      source,
+      outcome,
+      detail
+    });
+  }
+
+  /**
+   * Bind the SERVER-issued payment session id to an order (F-20).
+   *
+   * Reconciliation later reads this persisted value instead of anything a client sent, so
+   * only session creation performed by this process can decide which gateway record an
+   * order is verified against.
+   */
+  attachPaymentSession(orderId: string, sessionId: string): boolean {
+    if (!sessionId || typeof sessionId !== 'string' || sessionId.trim() === '') {
+      return false;
+    }
+    return orderRepository.attachPaymentSession(orderId, sessionId.trim());
+  }
+
+  /**
+   * Replace the persisted session with a freshly issued one (F-43).
+   *
+   * Only `POST /orders/:id/checkout` may call this, and only after the adapter has reported the
+   * CURRENT session as definitively non-payable ('unpaid' / 'failed' / 'expired' / 'cancelled').
+   * A session that is merely unverifiable ('pending') is never superseded, so a refresh can
+   * never orphan a payment that might still succeed.
+   */
+  supersedePaymentSession(orderId: string, previousSessionId: string, sessionId: string): boolean {
+    if (
+      !orderId ||
+      !previousSessionId ||
+      !sessionId ||
+      typeof sessionId !== 'string' ||
+      sessionId.trim() === ''
+    ) {
+      return false;
+    }
+    return orderRepository.supersedePaymentSession(orderId, previousSessionId, sessionId.trim());
+  }
+
+  /**
    * Refuse to replay an order for a caller that did not issue the request which
    * originally claimed the idempotency key (F-3). Throws a 409-mapped conflict.
    */
@@ -150,19 +235,89 @@ export class OrderService {
       return true;
     }
 
-    // Validate authoritative amount and currency
+    // F-05: settlement evidence must be a real, well-formed reference issued by the
+    // gateway. Empty strings and the retired self-synthesised placeholders are refused so
+    // an order can never be marked paid against a reference nobody ever issued.
+    if (
+      !paymentReference ||
+      typeof paymentReference !== 'string' ||
+      !PAYMENT_REFERENCE_PATTERN.test(paymentReference) ||
+      SYNTHETIC_PAYMENT_REFERENCES.includes(paymentReference)
+    ) {
+      orderRepository.recordPaymentAttempt({
+        orderId,
+        paymentSessionId: order.payment_session_id ?? null,
+        paymentReference: paymentReference || null,
+        amount: Number.isInteger(amountPaid) ? amountPaid : null,
+        currency: currency ?? null,
+        source: 'gateway_reconciliation',
+        outcome: 'rejected_invalid_reference',
+        detail: 'Settlement assertion carried no usable gateway payment reference.'
+      });
+      throw new Error(`Unverifiable settlement for order ${orderId}: invalid payment reference.`);
+    }
+
+    // Fail closed on anything that is not a fully-identified settlement.
+    //
+    // A mismatch is NOT a payment failure — it is an unverifiable assertion, so the order
+    // is deliberately LEFT IN ITS CURRENT STATE. The pre-remediation code wrote 'failed'
+    // here, which meant one malformed, partial or forged gateway payload could permanently
+    // destroy a legitimately payable order (a denial-of-sale), and it also stamped the
+    // unverified reference onto the row.
+    if (!Number.isInteger(amountPaid) || amountPaid <= 0) {
+      orderRepository.recordPaymentAttempt({
+        orderId,
+        paymentSessionId: order.payment_session_id ?? null,
+        paymentReference,
+        amount: null,
+        currency: currency ?? null,
+        source: 'gateway_reconciliation',
+        outcome: 'rejected_missing_amount',
+        detail: `Settlement assertion carried no positive integer amount in paise (${amountPaid}).`
+      });
+      throw new Error(`Unverifiable settlement for order ${orderId}: missing authoritative amount.`);
+    }
+
     if (order.amount !== amountPaid) {
-      orderRepository.updateStatus(orderId, 'failed', paymentReference);
+      orderRepository.recordPaymentAttempt({
+        orderId,
+        paymentSessionId: order.payment_session_id ?? null,
+        paymentReference,
+        amount: amountPaid,
+        currency: currency ?? null,
+        source: 'gateway_reconciliation',
+        outcome: 'rejected_amount_mismatch',
+        detail: `Expected ${order.amount} paise, asserted ${amountPaid} paise.`
+      });
       throw new Error(`Amount mismatch for order ${orderId}: Expected ${order.amount}, received ${amountPaid}`);
     }
 
-    if (order.currency !== currency) {
-      orderRepository.updateStatus(orderId, 'failed', paymentReference);
+    if (!currency || order.currency !== currency) {
+      orderRepository.recordPaymentAttempt({
+        orderId,
+        paymentSessionId: order.payment_session_id ?? null,
+        paymentReference,
+        amount: amountPaid,
+        currency: currency ?? null,
+        source: 'gateway_reconciliation',
+        outcome: 'rejected_currency_mismatch',
+        detail: `Expected ${order.currency}, asserted ${currency ?? '(missing)'}.`
+      });
       throw new Error(`Currency mismatch for order ${orderId}: Expected ${order.currency}, received ${currency}`);
     }
 
     const paidAt = new Date().toISOString();
     const updated = orderRepository.updateStatus(orderId, 'paid', paymentReference, paidAt);
+
+    orderRepository.recordPaymentAttempt({
+      orderId,
+      paymentSessionId: order.payment_session_id ?? null,
+      paymentReference,
+      amount: amountPaid,
+      currency,
+      source: 'gateway_reconciliation',
+      outcome: 'settled'
+    });
 
     if (updated && order.customer_email) {
       await this.emailService.sendOrderConfirmation(order.customer_email, orderId, {

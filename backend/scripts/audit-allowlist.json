@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "scope": "root package (npm audit, devDependencies included)",
+  "why": "VÉRRO pins `serve` (the static storefront server) as an exact devDependency so no test run downloads and executes an unpinned registry version. That pin pulls a dependency tree whose advisories are dev-only. Every other advisory must fail the gate on the spot.",
+  "rationaleDoc": "SECURITY_INVARIANTS.md",
+  "description": "Each entry names ONE advisory (GHSA id) plus the packages npm reports it under. An entry only silences that exact advisory id; any new advisory, and any new affected package, fails the gate. An entry whose expiresOn has passed ALSO fails the gate, even if nothing is currently vulnerable, so the decision has to be re-reviewed instead of rotting in the tree.",
+  "expectedReportedPackages": [
+    "minimatch",
+    "serve",
+    "serve-handler"
+  ],
+  "patchedByOverride": {
+    "advisoryId": "GHSA-vc2v-76pw-4v95",
+    "package": "compression",
+    "vulnerableRange": "<1.8.2",
+    "patchedVersion": "1.8.2",
+    "how": "package.json `overrides.compression = 1.8.2`. Verified: the advisory states affected `< 1.8.2` and patched `1.8.2` (CVE-2026-87776), the registry publishes 1.8.2, and the full audit no longer reports this advisory. Nothing depends on compression except serve's static-file path, which the e2e and viewport suites exercise end to end.",
+    "notAllowlistedBecause": "the fix exists and is a same-minor patch, so no acceptance is needed; if the override is ever removed, the advisory returns and fails this gate."
+  },
+  "entries": [
+    {
+      "advisoryId": "GHSA-g3hv-75wg-m249",
+      "cveId": "CVE-2026-118764",
+      "package": "minimatch",
+      "severity": "moderate",
+      "vulnerableRange": "<11.0.1",
+      "fixedIn": "11.0.1",
+      "reportedUnder": ["minimatch", "serve-handler"],
+      "reason": "Glob-pattern amplification (CWE-405) in the minimatch version that serve-handler@6.1.7 declares exactly. The fix is a three-major-version jump (3.1.5 -> 11.0.1) into a CommonJS `require('minimatch')(...)` call site whose export shape changed, i.e. an override here would trade a dev-only DoS for a likely break of static routing and of the serve.json redirects that deliver the storefront CSP.",
+      "compensatingControls": [
+        "the pattern is supplied by serve.json (a reviewed, in-repo constant), never by a request",
+        "storefront bound to loopback only",
+        "serve-handler is a devDependency: absent from `npm audit --omit=dev`",
+        "a wrong-but-live minimatch cannot bypass the CSP for the backend origin; the backend sets its own headers"
+      ],
+      "addedOn": "2026-11-01",
+      "expiresOn": "2026-12-31"
+    }
+  ]
+}

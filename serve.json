@@ -13,7 +13,7 @@
         { "key": "Cross-Origin-Opener-Policy", "value": "same-origin" },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; connect-src 'self' http://127.0.0.1:4000 http://localhost:4000; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+          "value": "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; connect-src 'self' http://127.0.0.1:4000 http://localhost:4000; frame-src 'self' http://127.0.0.1:7000 http://localhost:7000; object-src 'none'; worker-src 'none'; manifest-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
         }
       ]
     }
@@ -28,6 +28,8 @@
     { "source": "/node_modules/:path*.js", "destination": "/", "type": 302 },
     { "source": "/node_modules/:path*.css", "destination": "/", "type": 302 },
     { "source": "/.git/:path*", "destination": "/", "type": 302 },
+    { "source": "/qa-artifacts/:path*", "destination": "/", "type": 302 },
+    { "source": "/**/qa-artifacts/:path*", "destination": "/", "type": 302 },
     { "source": "/**/private_masters/:path*", "destination": "/", "type": 302 },
     { "source": "/**/*.md", "destination": "/", "type": 302 },
     { "source": "/**/*.json", "destination": "/", "type": 302 },
@@ -40,6 +42,7 @@
     { "source": "/screen.png", "destination": "/", "type": 302 }
   ],
   "unlisted": [
+    "qa-artifacts/**",
     "backend/**",
     "storage/**",
     "tests/**",

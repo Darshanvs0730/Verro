@@ -25,4 +25,208 @@
   --color-ink-muted: rgba(23, 23, 23, 0.65);
   --color-hairline: rgba(23, 23, 23, 0.15);
   --color-hairline-dark: rgba(255, 255, 255, 0.10);
+
+  /* Level 5: Sovereign Payment Modal Editorial Botanical & Paper Tokens */
+  --pm-bg-paper: #F7F4ED;
+  --pm-bg-white: #FFFEFA;
+  --pm-bg-sage: #E5EBE3;
+  --pm-green: #143D32;
+  --pm-green-dark: #0B2821;
+  --pm-terracotta: #B85F45;
+  --pm-text: #111815;
+  --pm-text-muted: #242E28;
+  --pm-border: #D1CAC0;
+  --pm-border-light: #DDD7CD;
 }
+
+/* Modal Keyframes & Scoped Utility Classes (CSP-Safe, Zero Inline Styles) */
+@keyframes verroFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.pm-backdrop {
+  background-color: rgba(18, 22, 20, 0.7);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: verroFadeIn 0.2s ease-out;
+}
+
+.pm-card {
+  background-color: #F7F4ED;
+  background-color: var(--pm-bg-paper);
+  border: 1px solid var(--pm-border);
+  color: var(--pm-text);
+  max-width: 900px;
+  box-shadow: 0 25px 50px -12px rgba(17, 24, 21, 0.25), 0 0 1px rgba(0, 0, 0, 0.12);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.pm-card-white {
+  background-color: #FFFEFA;
+  background-color: var(--pm-bg-white);
+  border: 1px solid var(--pm-border);
+}
+
+.pm-amount-box {
+  background-color: #E5EBE3;
+  background-color: var(--pm-bg-sage);
+  border: 1px solid #CAD4C7;
+}
+
+.pm-warning-box {
+  background-color: var(--pm-terracotta);
+  color: #FFFFFF;
+}
+
+.pm-border {
+  border-color: var(--pm-border);
+}
+
+.pm-border-light {
+  border-color: var(--pm-border-light);
+}
+
+.pm-text {
+  color: var(--pm-text);
+  font-weight: 600;
+}
+
+.pm-text-muted {
+  color: var(--pm-text-muted);
+  font-weight: 600;
+}
+
+.pm-text-green {
+  color: var(--pm-green);
+  font-weight: 700;
+}
+
+.pm-close-btn {
+  color: var(--pm-text);
+  transition: color 0.15s ease, transform 0.15s ease;
+}
+.pm-close-btn:hover {
+  color: #000000;
+  transform: scale(1.1);
+}
+
+.pm-copy-btn {
+  border: 1.5px solid var(--pm-green);
+  color: var(--pm-green);
+  background-color: transparent;
+  font-weight: 700;
+  transition: all 0.15s ease;
+}
+.pm-copy-btn:hover {
+  background-color: var(--pm-green);
+  color: #FFFFFF;
+  border-color: var(--pm-green);
+}
+
+.pm-cta-btn {
+  background-color: var(--pm-green);
+  color: #FFFFFF;
+  border: 1px solid var(--pm-green-dark);
+  font-weight: 700;
+  transition: background-color 0.15s ease, transform 0.15s ease;
+}
+.pm-cta-btn:hover {
+  background-color: var(--pm-green-dark);
+  transform: translateY(-1px);
+}
+
+.pm-qr-container {
+  background-color: #FFFFFF;
+  border: 1.5px solid var(--pm-border-light);
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.08);
+}
+
+.pm-step-num {
+  background-color: #CDD8CA;
+  color: var(--pm-green);
+  border: 1.5px solid #ABBCA7;
+  font-weight: 700;
+}
+
+.pm-app-chip {
+  background-color: #EDE8DF;
+  border: 1.5px solid #C9C2B4;
+  color: var(--pm-text);
+  font-weight: 700;
+}
+
+.pm-poll-dot {
+  background-color: var(--pm-green);
+}
+
+.pm-refresh-btn {
+  color: var(--pm-green);
+  font-weight: 700;
+  transition: opacity 0.15s ease;
+}
+.pm-refresh-btn:hover {
+  text-decoration: underline;
+  opacity: 0.85;
+}
+
+.pm-utr-input {
+  background-color: #FFFFFF;
+  border: 1.5px solid var(--pm-border);
+  color: var(--pm-text);
+  font-weight: 700;
+}
+.pm-utr-input::placeholder {
+  color: #6B7280;
+  font-weight: 500;
+}
+.pm-utr-input:focus {
+  border-color: var(--pm-green);
+  outline: none;
+}
+
+.pm-verify-btn {
+  background-color: var(--pm-green);
+  color: #FFFFFF;
+  font-weight: 700;
+  transition: background-color 0.15s ease;
+}
+.pm-verify-btn:hover {
+  background-color: var(--pm-green-dark);
+}
+
+.pm-serif-title {
+  font-family: 'Bodoni Moda', Georgia, serif;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-shadow: 0 0 0.5px rgba(17, 24, 21, 0.5);
+}
+
+.pm-bold-amount {
+  font-family: 'Bodoni Moda', Georgia, serif;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-shadow: 0 0 0.5px rgba(20, 61, 50, 0.5);
+}
+
+.pm-success-icon-wrap {
+  background-color: var(--pm-bg-sage);
+  border: 2px solid var(--pm-green);
+}
+
+.pm-success-icon {
+  color: var(--pm-green);
+}
+
+.pm-download-btn {
+  background-color: var(--pm-green);
+  color: #FFFFFF;
+  border: 1px solid var(--pm-green-dark);
+  font-weight: 700;
+  transition: background-color 0.15s ease;
+}
+.pm-download-btn:hover {
+  background-color: var(--pm-green-dark);
+}
+

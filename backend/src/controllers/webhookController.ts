@@ -111,6 +111,25 @@ export const webhookController = {
       // 5. Apply the authoritative order state transition.
       //    P-1: the lifecycle policy is enforced at the repository write choke point, so a
       //    late or duplicated "failed" signal can never downgrade a settled (paid) order.
+      //
+      //    Fail closed on a paid event that carries no authoritative amount: such an event
+      //    is structurally untrustworthy and is refused loudly (400) instead of being handed
+      //    to the settlement path with a guessed or zero amount.
+      if (event.status === 'paid' && (!Number.isInteger(event.amount) || event.amount <= 0)) {
+        orderRepository.logAudit('WEBHOOK', event.orderId, 'MISSING_AMOUNT_REJECTED', {
+          eventId: event.eventId,
+          amount: event.amount
+        });
+        res.setHeader('Cache-Control', 'no-store');
+        res.status(400).json({
+          error: 'Webhook rejected: a paid event must carry a positive integer amount in paise.'
+        });
+        return;
+      }
+
+      // F-25: every terminal outcome is applied as its own state. A paid event still goes
+      // through the single authoritative settlement choke point, which re-validates amount,
+      // currency and reference before any state is written.
       let applied = true;
       if (event.status === 'paid') {
         await orderService.processVerifiedPayment(
@@ -119,6 +138,18 @@ export const webhookController = {
           event.amount,
           event.currency
         );
+      } else if (event.status === 'expired' || event.status === 'cancelled') {
+        orderRepository.recordPaymentAttempt({
+          orderId: event.orderId,
+          paymentSessionId: order.payment_session_id ?? null,
+          paymentReference: event.paymentReference || null,
+          amount: null,
+          currency: event.currency || null,
+          source: 'gateway_webhook',
+          outcome: `gateway_${event.status}`,
+          detail: `Event ${event.eventId} reported ${event.status}.`
+        });
+        applied = await orderRepository.updateStatus(event.orderId, event.status);
       } else {
         applied = await orderService.failOrder(event.orderId, `Gateway event reported status: ${event.status}`);
       }
@@ -137,88 +168,6 @@ export const webhookController = {
       idempotencyRepository.save(idempotencyKey, 200, JSON.stringify(responsePayload), eventFingerprint);
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json(responsePayload);
-    } catch (err) {
-      next(err);
-    }
-  },
-
-  /**
-   * POST /api/v1/webhooks/sms
-   * POST /api/v1/webhooks/email
-   * Multi-rail settlement for iOS Shortcuts, Bank SMS, or Email Forwarders
-   */
-  async handleSmsOrEmailWebhook(req: Request, res: Response, next: NextFunction): Promise<void> {
-    try {
-      res.setHeader('Cache-Control', 'no-store');
-
-      let rawText = '';
-      if (Buffer.isBuffer(req.body)) {
-        rawText = req.body.toString('utf8');
-      } else if (typeof req.body === 'string') {
-        rawText = req.body;
-      } else if (req.body && typeof req.body === 'object') {
-        rawText = (req.body as any).message || (req.body as any).text || (req.body as any).body || (req.body as any).content || JSON.stringify(req.body);
-      }
-
-      if (!rawText || rawText.trim().length === 0) {
-        res.status(400).json({ error: 'Empty notification body received.' });
-        return;
-      }
-
-      // Check if this looks like a credit/deposit notification
-      const isCredit = /credit|credited|received|deposited|transferred/i.test(rawText);
-      if (!isCredit) {
-        res.status(200).json({ received: true, ignored: true, reason: 'Non-credit notification' });
-        return;
-      }
-
-      // Extract 12-digit UTR (standard NPCI banking reference)
-      const utrMatch = rawText.match(/\b([4-9]\d{11}|\d{12})\b/);
-      const utr = utrMatch ? utrMatch[1] : `sms_${Date.now()}`;
-
-      // Extract Amount in INR
-      const amountMatch = rawText.match(/(?:Rs\.?|INR|₹)\s*([\d,]+(?:\.\d{1,2})?)/i) ||
-                          rawText.match(/credited (?:by|with)?\s*(?:Rs\.?|INR|₹)?\s*([\d,]+(?:\.\d{1,2})?)/i);
-      let parsedAmountPaise = 39900; // default VÉRRO Vol. 01 price
-      if (amountMatch) {
-        const floatVal = parseFloat(amountMatch[1].replace(/,/g, ''));
-        if (!isNaN(floatVal) && floatVal > 0) {
-          parsedAmountPaise = Math.round(floatVal * 100);
-        }
-      }
-
-      // Check for custom order ref like VERRO1FB04F2A
-      const refMatch = rawText.match(/VERRO([A-Z0-9]{4,12})/i);
-      let targetOrder = null;
-      if (refMatch) {
-        targetOrder = orderRepository.findByReferenceSuffix(refMatch[1]);
-      }
-      if (!targetOrder) {
-        targetOrder = orderRepository.findRecentPending(parsedAmountPaise);
-      }
-
-      if (!targetOrder) {
-        orderRepository.logAudit('NOTIFICATION', utr, 'UNMATCHED_CREDIT_ALERT', { rawText: rawText.slice(0, 200) });
-        res.status(200).json({ received: true, matched: false, utr, reason: 'No pending order matching amount/reference' });
-        return;
-      }
-
-      // Authoritative settlement — strictly idempotent
-      await orderService.processVerifiedPayment(
-        targetOrder.id,
-        utr,
-        targetOrder.amount,
-        targetOrder.currency
-      );
-
-      res.status(200).json({
-        success: true,
-        settled: true,
-        orderId: targetOrder.id,
-        utr,
-        amount: targetOrder.amount,
-        processedAt: new Date().toISOString()
-      });
     } catch (err) {
       next(err);
     }

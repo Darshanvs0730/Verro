@@ -5,6 +5,7 @@
 import { createApp, assertRuntimeSecrets } from './app.js';
 import { env } from '../config/env.js';
 import { idempotencyRepository } from '../repositories/idempotencyRepository.js';
+import { describeActivePaymentRail } from './paymentRailBanner.js';
 
 // FAIL-CLOSED: unresolved production secrets abort startup before binding a port.
 assertRuntimeSecrets();
@@ -16,6 +17,12 @@ const purgedRecords = idempotencyRepository.purgeExpired();
 
 const app = createApp();
 
+/**
+ * F-46: report the rail that is ACTUALLY active (implementation lives in `paymentRailBanner.ts`
+ * so the regression suite can assert the reported rail without binding a port).
+ */
+const activePaymentRail = describeActivePaymentRail();
+
 app.listen(env.port, env.host, () => {
   console.log(`==================================================`);
   console.log(`VÉRRO Commerce Backend running at http://${env.host}:${env.port}`);
@@ -25,6 +32,6 @@ app.listen(env.port, env.host, () => {
   console.log(`Trusted proxy hops: ${env.trustProxyHops === 0 ? 'none (X-Forwarded-For is ignored)' : env.trustProxyHops}`);
   console.log(`Expired idempotency records purged at boot: ${purgedRecords}`);
   console.log(`Test fixture routes: ${env.testRoutesEnabled ? 'ENABLED (NODE_ENV=test + token guarded)' : 'disabled'}`);
-  console.log(`Payment Gateway Adapter: Inactive / Dev-Safe (mock rail)`);
+  console.log(`Payment Gateway Adapter: ${activePaymentRail}`);
   console.log(`==================================================`);
 });

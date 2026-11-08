@@ -50,6 +50,26 @@ for (const k of identical) {
 console.log('\n--- keys in BOTH with DIFFERENT value ---');
 for (const k of different) console.log(`  ${k}`);
 
-const leakingSecrets = identical.filter((k) => SECRET_LIKE.test(k));
-console.log(`\nSecret-like values duplicated from .env into the committed .env.example: ${leakingSecrets.length}`);
+// A "duplicated secret" is a secret-like key whose committed value is a real credential. Empty
+// placeholders and non-secret literals (numeric durations, boolean flags) are configuration, not
+// credentials, so they are reported separately instead of inflating the leak count.
+const NON_SECRET_LITERAL = /^(true|false|[0-9]+)$/i;
+
+const secretLikeIdentical = identical.filter((k) => SECRET_LIKE.test(k));
+const leakingSecrets = secretLikeIdentical.filter((k) => {
+  const value = String(real[k]);
+  return value.length > 0 && !NON_SECRET_LITERAL.test(value);
+});
+const benignIdentical = secretLikeIdentical.filter((k) => !leakingSecrets.includes(k));
+
+console.log('\n--- secret-like keys in BOTH, excluded as non-credentials (names/lengths only) ---');
+for (const k of benignIdentical) {
+  const value = String(real[k]);
+  console.log(`  ${k}  len=${value.length}  (${value.length === 0 ? 'empty placeholder' : 'non-secret literal'})`);
+}
+
+console.log(`\nReal secret values duplicated from .env into the committed .env.example: ${leakingSecrets.length}`);
+if (leakingSecrets.length > 0) {
+  for (const k of leakingSecrets) console.log(`  LEAK: ${k}`);
+}
 process.exit(leakingSecrets.length === 0 ? 0 : 2);

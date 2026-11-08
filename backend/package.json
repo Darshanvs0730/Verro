@@ -9,7 +9,8 @@
     "serve:test": "tsx src/app/server.ts",
     "build": "tsc",
     "start": "node dist/app/server.js",
-    "test": "tsx tests/backend.test.ts && tsx tests/youpiAdapter.test.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx tests/backend.test.ts && tsx tests/youpiAdapter.test.ts && tsx tests/security.test.ts",
     "test:youpi": "tsx tests/youpiAdapter.test.ts"
   },
   "keywords": [

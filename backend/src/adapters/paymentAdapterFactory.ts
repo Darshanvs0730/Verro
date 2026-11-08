@@ -49,6 +49,19 @@ export function getPaymentAdapter(): PaymentGatewayAdapter {
           'FATAL: A strong WEBHOOK_SECRET (>= 32 chars) must be explicitly configured for YouPI payment rail in production.'
         );
       }
+      // F-46: fail closed on the merchant payment IDENTITY too. `verifyRuntimeSecrets()` already
+      // refuses to boot, and this guard keeps the invariant if an adapter is ever built through
+      // another entrypoint (a script, a worker, a test harness). Getting this wrong does not throw
+      // — it silently pays the wrong person.
+      for (const identity of ['PAYMENT_GATEWAY_MERCHANT_VPA', 'PAYMENT_GATEWAY_MERCHANT_NAME']) {
+        const identityDiag = env.secretDiagnostics.find((d) => d.name === identity);
+        if (!identityDiag || identityDiag.status !== 'configured') {
+          throw new PaymentAdapterConfigurationError(
+            `FATAL: ${identity} must be explicitly configured for the YouPI payment rail in production. ` +
+              'The development fallback would route real settlement to the wrong payee.'
+          );
+        }
+      }
     }
 
     selectedAdapter = new YouPiPaymentAdapter({
@@ -56,7 +69,13 @@ export function getPaymentAdapter(): PaymentGatewayAdapter {
       portalUrl: env.paymentGatewayPortalUrl || 'http://localhost:7000',
       merchantId: env.paymentGatewayMerchantId,
       payeeVpa: env.paymentGatewayMerchantVpa,
+      payeeName: env.paymentGatewayMerchantName,
       webhookSecret: env.webhookSecret,
+      // F-32: the OUTBOUND merchant credential is deliberately a separate value from the
+      // INBOUND webhook signing key. Sharing one secret for both directions meant that
+      // anything able to observe the outbound header (proxy logs, gateway dashboards, a
+      // compromised gateway) also gained the ability to forge inbound settlement events.
+      merchantKey: env.paymentGatewaySecret,
       returnUrl: env.paymentGatewayReturnUrl
     });
     return selectedAdapter;

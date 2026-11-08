@@ -5,13 +5,15 @@
   "type": "module",
   "scripts": {
     "build": "node build.js",
-    "dev": "npx -y serve . -l 4173",
-    "preview": "npx -y serve . -l 4173",
+    "dev": "serve . -l tcp://127.0.0.1:4173",
+    "preview": "serve . -l tcp://127.0.0.1:4173",
     "dev:backend": "npm --prefix backend run dev",
     "test": "node tests/validate-architecture.js",
     "test:backend": "npm --prefix backend test",
     "test:e2e": "node tests/e2e-commerce.test.js",
-    "test:viewport": "node tests/viewport-test.js"
+    "test:viewport": "node tests/viewport-test.js",
+    "security:gate": "bash backend/scripts/security-gate.sh fast",
+    "security:gate:full": "bash backend/scripts/security-gate.sh full"
   },
   "keywords": [
     "verro",
@@ -24,7 +26,11 @@
   "license": "UNLICENSED",
   "private": true,
   "devDependencies": {
-    "playwright": "^1.63.0"
+    "playwright": "^1.63.0",
+    "serve": "14.2.6"
+  },
+  "overrides": {
+    "compression": "1.8.2"
   },
   "dependencies": {
     "qrcode": "^1.5.4"

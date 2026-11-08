@@ -4,6 +4,7 @@
  * Enforces zero access for unpaid orders.
  */
 
+import crypto from 'node:crypto';
 import { orderRepository } from '../repositories/orderRepository.js';
 import { getAuthoritativeProduct } from '../config/catalog.js';
 import { FileStorageAdapter, LocalPrivateStorageAdapter } from '../adapters/fileStorageAdapter.js';
@@ -62,18 +63,41 @@ export class FulfillmentService {
     }
     const access = await this.fileStorage.generateDownloadAccess(order.id, product.deliveryPackage, purchaseBinding);
 
-    // 6. Record Fulfillment in Order Record
+    // 6. Register the minted token as a single-use grant (F-41). Only the digest is stored,
+    // so the table cannot be used to reconstruct a usable URL. From here on, exactly one GET
+    // may claim it; every subsequent attempt is refused as a replay.
+    orderRepository.registerDownloadGrant(
+      this.hashDownloadToken(access.token),
+      order.id,
+      product.deliveryPackage,
+      new Date().toISOString(),
+      access.expiresAt
+    );
+
+    // 7. Record Fulfillment in Order Record
     const fulfilledAt = new Date().toISOString();
     orderRepository.markFulfilled(order.id, fulfilledAt);
 
-    // 7. Dispatch Access Email if Customer Email is Present
+    // 8. Dispatch Access Email if Customer Email is Present — at most once per order.
+    // The HTTP response is the authoritative delivery channel (it carries a live link);
+    // the email is a record, so a repeated /download call must not re-send it (F-41).
     if (order.customer_email) {
-      await this.emailService.sendDownloadAccess(
-        order.customer_email,
+      const claimed = orderRepository.claimNotificationDispatch(
+        `download_access:${order.id}`,
         order.id,
-        access.downloadUrl,
-        access.expiresAt
+        'download_access',
+        order.customer_email,
+        new Date().toISOString()
       );
+
+      if (claimed) {
+        await this.emailService.sendDownloadAccess(
+          order.customer_email,
+          order.id,
+          access.downloadUrl,
+          access.expiresAt
+        );
+      }
     }
 
     return {
@@ -85,53 +109,80 @@ export class FulfillmentService {
     };
   }
 
+  /** Digest used as the single-use grant key (and as an audit-safe token identifier). */
+  private hashDownloadToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
   /**
-   * Verify temporary download token and return master file path for streaming
+   * Verify temporary download token and return master file path for streaming.
+   * The grant is claimed exactly once (F-41): a replayed URL is refused even inside its TTL.
    */
-  async verifyDownloadRequest(token: string): Promise<{ authorized: boolean; filePath?: string; filename?: string; error?: string }> {
+  async verifyDownloadRequest(token: string): Promise<{ authorized: boolean; filePath?: string; filename?: string; error?: string; reason?: 'forged' | 'expired' | 'replayed' | 'denied' }> {
     const tokenVerification = this.fileStorage.verifyDownloadToken(token);
 
     if (!tokenVerification.isValid) {
       if (tokenVerification.expired) {
-        return { authorized: false, error: 'Download authorization token has expired.' };
+        return { authorized: false, error: 'Download authorization token has expired.', reason: 'expired' };
       }
-      return { authorized: false, error: 'Invalid or forged download authorization token.' };
+      return { authorized: false, error: 'Invalid or forged download authorization token.', reason: 'forged' };
     }
 
     const { orderId, filename, purchaserTokenHash } = tokenVerification;
     if (!orderId || !filename || !purchaserTokenHash) {
-      return { authorized: false, error: 'Malformed token claims.' };
+      return { authorized: false, error: 'Malformed token claims.', reason: 'forged' };
     }
 
     // Verify the filename is an allowlisted catalog delivery package
     if (!this.fileStorage.isAllowedPackage(filename)) {
-      return { authorized: false, error: 'Requested package is not part of the authorized catalog.' };
+      return { authorized: false, error: 'Requested package is not part of the authorized catalog.', reason: 'denied' };
     }
 
     // Verify order is still paid
     const order = orderRepository.findById(orderId);
     if (!order || order.status !== 'paid') {
-      return { authorized: false, error: 'Order is not in paid status.' };
+      return { authorized: false, error: 'Order is not in paid status.', reason: 'denied' };
     }
 
     // CRITICAL BINDING CHECK: the token must reference the exact package that the
     // catalog associates with THIS order's product. Prevents cross-product reuse.
     const product = getAuthoritativeProduct(order.product_id);
     if (!product || product.deliveryPackage !== filename) {
-      return { authorized: false, error: 'Download token does not match the purchased product package.' };
+      return { authorized: false, error: 'Download token does not match the purchased product package.', reason: 'denied' };
     }
 
     // CRITICAL BINDING CHECK: the token must be bound to the purchaser access token
     // registered on the order at creation time.
     if (!order.customer_token_hash || order.customer_token_hash !== purchaserTokenHash) {
-      return { authorized: false, error: 'Download token is not bound to the order purchaser.' };
+      return { authorized: false, error: 'Download token is not bound to the order purchaser.', reason: 'denied' };
     }
 
     const filePath = this.fileStorage.getFilePath(filename);
     const metadata = await this.fileStorage.getFileMetadata(filename);
 
     if (!metadata.exists) {
-      return { authorized: false, error: 'Requested file is not available on storage.' };
+      return { authorized: false, error: 'Requested file is not available on storage.', reason: 'denied' };
+    }
+
+    // SINGLE-USE CLAIM (F-41) — the last step, so a request that fails any authorization
+    // check above never burns the grant. Unknown tokens are refused: grants issued before
+    // this migration (or already consumed) can only be replaced by requesting a fresh link
+    // from POST /download, which is never rate-limited into a dead end.
+    const grant = orderRepository.findDownloadGrant(this.hashDownloadToken(token));
+    if (!grant) {
+      return {
+        authorized: false,
+        error: 'Download authorization is no longer valid. Please request a fresh download link.',
+        reason: 'replayed'
+      };
+    }
+
+    if (!orderRepository.consumeDownloadGrant(grant.token_hash, new Date().toISOString())) {
+      return {
+        authorized: false,
+        error: 'This download link has already been used. Please request a fresh download link.',
+        reason: 'replayed'
+      };
     }
 
     // NOTE: filePath is intentionally NOT returned to the client; it is used only

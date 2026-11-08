@@ -122,9 +122,20 @@ export class DevelopmentPaymentAdapter implements PaymentGatewayAdapter {
     }
 
     const amount = typeof data.amount === 'number' && Number.isInteger(data.amount) ? data.amount : 0;
-    const currency = typeof data.currency === 'string' && data.currency.length > 0 ? data.currency : 'INR';
+
+    // F-05: a settlement event must name the payment it asserts. The previous `'dev_ref'`
+    // default minted a reference no gateway ever issued, and an order settled against it
+    // carried that fabrication as its permanent proof of payment.
     const paymentReference =
-      typeof data.paymentReference === 'string' && data.paymentReference.length > 0 ? data.paymentReference : 'dev_ref';
+      typeof data.paymentReference === 'string' && data.paymentReference.trim() !== ''
+        ? data.paymentReference.trim()
+        : '';
+    if (!paymentReference) {
+      console.warn('[DevPaymentAdapter]: Rejected webhook with no payment reference.');
+      return invalid(eventId, orderId);
+    }
+
+    const currency = typeof data.currency === 'string' && data.currency.length > 0 ? data.currency : 'INR';
 
     return {
       isValid: true,

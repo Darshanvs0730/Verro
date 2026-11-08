@@ -4,7 +4,7 @@
 
 import express, { Express, Request, Response, RequestHandler } from 'express';
 import cors from 'cors';
-import { env, getSecretPosture, verifyRuntimeSecrets } from '../config/env.js';
+import { env, verifyRuntimeSecrets } from '../config/env.js';
 import orderRoutes from '../routes/orderRoutes.js';
 import webhookRoutes from '../routes/webhookRoutes.js';
 import testRoutes from '../routes/testRoutes.js';
@@ -98,16 +98,19 @@ export function createApp(webhookRawParser?: RequestHandler): Express {
     return jsonParser(req, res, next);
   });
 
-  // Health & Service Metadata Check
+  // Health & Service Metadata Check.
+  // F-47: the response carries liveness metadata ONLY. It used to include a `secretPosture` array
+  // (configured / ephemeral / too-short / missing-in-production per secret name), which handed any
+  // unauthenticated caller a configuration oracle — e.g. "this deployment signs webhooks with an
+  // auto-generated key" — with no benefit to a load balancer. Operators get that posture from the
+  // boot log (`verifyRuntimeSecrets`), which is where it belongs.
   app.get('/health', (req: Request, res: Response) => {
     res.setHeader('Cache-Control', 'no-store');
     res.status(200).json({
       status: 'operational',
       service: 'verro-commerce-backend',
       environment: env.nodeEnv,
-      timestamp: new Date().toISOString(),
-      // Capability posture only — never secret values
-      secretPosture: getSecretPosture()
+      timestamp: new Date().toISOString()
     });
   });
 

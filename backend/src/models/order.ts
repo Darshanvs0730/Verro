@@ -26,6 +26,15 @@ export interface OrderRecord {
    * make another party's request replay a foreign order.
    */
   request_fingerprint?: string | null;
+  /**
+   * Server-persisted gateway payment session identifier (F-20).
+   *
+   * Settlement reconciliation MUST be driven by THIS value — never by a client-supplied
+   * reference and never by the order id. It is written only by server-side session
+   * creation, so an attacker who guesses an order id cannot steer the verification query
+   * at an arbitrary (or nonexistent) gateway record.
+   */
+  payment_session_id?: string | null;
   created_at: string;
   updated_at: string;
   paid_at: string | null;
@@ -53,11 +62,14 @@ export interface OrderResponseDTO {
   checkoutUrl?: string;
   upiUri?: string;
   payeeVpa?: string;
+  /** F-48: authoritative payee display name for the UPI intent (never hardcoded client-side). */
+  payeeName?: string;
   paymentSession?: {
     sessionId: string;
     checkoutUrl?: string;
     upiUri?: string;
     payeeVpa?: string;
+    payeeName?: string;
     amount: number;
     currency: string;
     mode: 'production' | 'development_mock';

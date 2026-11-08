@@ -25,6 +25,29 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const rootDir = path.resolve(__dirname, '..');
 const screenshotDir = path.join(rootDir, 'tests', 'screenshots');
+const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:4000';
+
+/**
+ * F-44: `purchaseProduct()` requires the commerce backend. Previously QA 8 printed a bare "FAIL"
+ * whenever the backend was not running, yet the process still exited 0 — a green suite could
+ * therefore hide a genuinely broken purchase path. The check is now:
+ *   - SKIPPED (and labelled as such, non-fatal) when the backend is unreachable, and
+ *   - ASSERTED (fatal, non-zero exit) when the backend is reachable.
+ * Every other assertion below also records its failure instead of only printing it.
+ */
+async function isBackendReachable() {
+  try {
+    const res = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(2500) });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+const failures = [];
+function recordFailure(label) {
+  failures.push(label);
+}
 
 const viewports = [
   { name: 'mobile_390px', width: 390, height: 844, isMobile: true },
@@ -39,6 +62,10 @@ async function runQASuite() {
   console.log('=== VÉRRO Phase 6 Production Content & Visual QA Suite ===\n');
   const browser = await chromium.launch();
   const summary = [];
+  const backendReachable = await isBackendReachable();
+  console.log(
+    `Commerce backend probe (${BACKEND_URL}/health): ${backendReachable ? 'REACHABLE — QA 8 will be asserted' : 'UNREACHABLE — QA 8 will be skipped'}\n`
+  );
 
   for (const vp of viewports) {
     console.log(`\n--- Auditing Viewport: ${vp.name} (${vp.width}x${vp.height}) ---`);
@@ -82,6 +109,7 @@ async function runQASuite() {
     const clientWidth = await page.evaluate(() => document.documentElement.clientWidth);
     const hasOverflow = scrollWidth > clientWidth;
     console.log(`[QA 1] Horizontal Overflow: scrollWidth=${scrollWidth}, clientWidth=${clientWidth} -> ${hasOverflow ? 'FAIL (Overflow detected)' : 'PASS (0px overflow)'}`);
+    if (hasOverflow) recordFailure(`${vp.name}: horizontal overflow (${scrollWidth}px > ${clientWidth}px)`);
 
     // 2. Broken Image Audit (excluding lightbox-img which is initialized on demand)
     const brokenImages = await page.evaluate(() => {
@@ -91,6 +119,7 @@ async function runQASuite() {
         .map(img => img.src || img.getAttribute('src'));
     });
     console.log(`[QA 2] Broken Images: ${brokenImages.length === 0 ? 'PASS (0 broken)' : `FAIL (${brokenImages.join(', ')})`}`);
+    if (brokenImages.length > 0) recordFailure(`${vp.name}: broken images -> ${brokenImages.join(', ')}`);
 
     // 3. Accessibility & Heading Hierarchy Audit (only run once on first viewport)
     if (vp.name === 'mobile_390px') {
@@ -102,6 +131,7 @@ async function runQASuite() {
         return { h1Count: h1s.length, h1: h1s[0], h2Count: h2s.length, ariaModal, roleDialog };
       });
       console.log(`[QA 3] Semantic Headings: Exactly 1 H1 ("${headingReport.h1.slice(0, 30)}..."): ${headingReport.h1Count === 1 ? 'PASS' : 'FAIL'}`);
+      if (headingReport.h1Count !== 1) recordFailure(`${vp.name}: expected exactly 1 <h1>, found ${headingReport.h1Count}`);
       console.log(`[QA 3] Section H2s count: ${headingReport.h2Count}`);
       console.log(`[QA 3] Lightbox Dialog Semantics: aria-modal=${headingReport.ariaModal}, role=${headingReport.roleDialog} -> PASS`);
     }
@@ -120,6 +150,7 @@ async function runQASuite() {
           return d && !d.classList.contains('hidden');
         });
         console.log(`[QA 4] Mobile Drawer Touch/Click Open: ${drawerVisible ? 'PASS' : 'FAIL'}`);
+        if (!drawerVisible) recordFailure(`${vp.name}: mobile drawer did not open`);
 
         if (vp.isMobile) {
           await menuIcon.tap();
@@ -131,6 +162,7 @@ async function runQASuite() {
           return d && d.classList.contains('hidden');
         });
         console.log(`[QA 4] Mobile Drawer Touch/Click Close: ${drawerClosed ? 'PASS' : 'FAIL'}`);
+        if (!drawerClosed) recordFailure(`${vp.name}: mobile drawer did not close`);
       }
     }
 
@@ -144,6 +176,7 @@ async function runQASuite() {
           return c && c.classList.contains('is-active');
         });
         console.log(`[QA 5] Archive Proof Card Touch Toggle: ${isActive ? 'PASS' : 'FAIL'}`);
+        if (!isActive) recordFailure(`${vp.name}: archive proof card touch toggle did not activate`);
         await proofCard.tap(); // toggle back
       } else {
         await proofCard.hover();
@@ -165,6 +198,7 @@ async function runQASuite() {
         return first && !first.classList.contains('hidden') && btn.getAttribute('aria-expanded') === 'true';
       });
       console.log(`[QA 6] FAQ Accordion Expand & aria-expanded="true": ${faqExpanded ? 'PASS' : 'FAIL'}`);
+      if (!faqExpanded) recordFailure(`${vp.name}: FAQ accordion did not expand`);
 
       if (vp.isMobile) {
         await firstFaqToggle.tap();
@@ -177,6 +211,7 @@ async function runQASuite() {
         return first && first.classList.contains('hidden') && btn.getAttribute('aria-expanded') === 'false';
       });
       console.log(`[QA 6] FAQ Accordion Collapse & aria-expanded="false": ${faqCollapsed ? 'PASS' : 'FAIL'}`);
+      if (!faqCollapsed) recordFailure(`${vp.name}: FAQ accordion did not collapse`);
     }
 
     // 7. Lightbox Open & Keyboard Navigation Audit
@@ -186,6 +221,7 @@ async function runQASuite() {
       return lb && !lb.classList.contains('hidden');
     });
     console.log(`[QA 7] Lightbox Open: ${lightboxOpen ? 'PASS' : 'FAIL'}`);
+    if (!lightboxOpen) recordFailure(`${vp.name}: lightbox did not open`);
 
     // Test Keyboard navigation (ArrowRight -> Slide 2)
     await page.keyboard.press('ArrowRight');
@@ -201,6 +237,7 @@ async function runQASuite() {
       return lb && lb.classList.contains('hidden');
     });
     console.log(`[QA 7] Lightbox Escape Key Closes Modal: ${lightboxClosed ? 'PASS' : 'FAIL'}`);
+    if (!lightboxClosed) recordFailure(`${vp.name}: Escape key did not close lightbox`);
 
     // 8. Phase 9 Commerce Lifecycle & Payment-Pending State Audit
     const ctaPromise = page.evaluate(() => window.purchaseProduct('vol-01'));
@@ -217,9 +254,38 @@ async function runQASuite() {
     });
 
     const ctaPass = commerceCheck.hasToast && commerceCheck.hasButtonState;
-    console.log(`[QA 8] Commerce Lifecycle State: ${ctaPass ? 'PASS (payment_pending rendered)' : 'FAIL'}`);
+    if (backendReachable) {
+      console.log(`[QA 8] Commerce Lifecycle State: ${ctaPass ? 'PASS (payment_pending rendered)' : 'FAIL'}`);
+      if (!ctaPass) {
+        recordFailure(
+          `${vp.name}: commerce lifecycle state missing (toast=${commerceCheck.hasToast}, buttonState=${commerceCheck.hasButtonState})`
+        );
+      }
+    } else {
+      console.log('[QA 8] Commerce Lifecycle State: SKIPPED (commerce backend not reachable — start the backend to assert)');
+    }
 
-    // 9. Capture Full-Page Screenshot
+    // 9. Console Error Audit — a console error means the storefront threw at runtime.
+    //
+    // F-44: when the commerce backend is absent, the browser legitimately reports network-origin
+    // errors from the aborted purchase call. Those are reported but not counted as failures, so
+    // the suite does not paper over a broken purchase path while also not failing merely because
+    // no backend was running. With the backend up, every console error is fatal.
+    const networkOriginError = /Failed to fetch|ERR_CONNECTION_REFUSED|NetworkError|net::ERR|Load failed/i;
+    const assertedConsoleErrors = backendReachable
+      ? consoleErrors
+      : consoleErrors.filter(text => !networkOriginError.test(text));
+    const ignoredOfflineErrors = consoleErrors.length - assertedConsoleErrors.length;
+
+    console.log(
+      `[QA 9] Console Errors: ${assertedConsoleErrors.length === 0 ? 'PASS (0 errors)' : `FAIL (${assertedConsoleErrors.length})`}` +
+        (ignoredOfflineErrors > 0 ? ` [${ignoredOfflineErrors} network-origin error(s) ignored while backend offline]` : '')
+    );
+    if (assertedConsoleErrors.length > 0) {
+      recordFailure(`${vp.name}: ${assertedConsoleErrors.length} console error(s) -> ${assertedConsoleErrors.join(' | ')}`);
+    }
+
+    // 10. Capture Full-Page Screenshot
     const screenshotPath = path.join(screenshotDir, `viewport_${vp.name}.png`);
     await page.screenshot({ path: screenshotPath, fullPage: true });
     console.log(`✓ Saved screenshot: ${screenshotPath}`);
@@ -241,6 +307,20 @@ async function runQASuite() {
   console.log('PHASE 6 QA SUITE RESULTS (ALL VIEWPORTS)');
   console.log('==================================================');
   console.table(summary);
+
+  console.log('==================================================');
+  if (failures.length > 0) {
+    console.log(`PHASE 6 QA SUITE: FAIL — ${failures.length} assertion failure(s)`);
+    failures.forEach(f => console.log(`  ✗ ${f}`));
+    console.log('==================================================');
+    process.exitCode = 1;
+  } else {
+    console.log(
+      `PHASE 6 QA SUITE: PASS — all assertions satisfied${backendReachable ? '' : ' (QA 8 skipped: commerce backend unreachable)'}`
+    );
+    console.log('==================================================');
+    process.exitCode = 0;
+  }
 }
 
 runQASuite().catch(err => {

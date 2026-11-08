@@ -28,6 +28,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import os from 'node:os';
 import { spawn, execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -36,7 +37,9 @@ const ROOT_DIR = path.resolve(__dirname, '..');
 const BACKEND_DIR = path.join(ROOT_DIR, 'backend');
 
 const BACKEND_URL = 'http://127.0.0.1:4000';
-const STOREFRONT_URL = 'http://localhost:4173/';
+// 127.0.0.1, not "localhost": the storefront is now bound to loopback IPv4 only, and on macOS
+// "localhost" resolves to ::1 first — an IPv6 listener that no longer exists (F-44 hardening).
+const STOREFRONT_URL = 'http://127.0.0.1:4173/';
 
 /**
  * F-1: fixture-route authorization token.
@@ -53,6 +56,29 @@ const TEST_FIXTURE_TOKEN = process.env.TEST_FIXTURE_TOKEN || `e2e_${crypto.rando
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET || crypto.randomBytes(32).toString('hex');
 
 const childProcesses = [];
+
+/**
+ * F-44: the throwaway database directory this run created, removed on exit. It is deliberately
+ * created under `os.tmpdir()` and never inside the repository.
+ */
+let e2eDatabaseDir = '';
+
+function cleanupDatabaseDir() {
+  if (!e2eDatabaseDir) return;
+  for (const suffix of ['', '-wal', '-shm']) {
+    try {
+      fs.rmSync(path.join(e2eDatabaseDir, `verro_commerce.e2e.sqlite${suffix}`), { force: true });
+    } catch {
+      // Best effort.
+    }
+  }
+  try {
+    fs.rmdirSync(e2eDatabaseDir);
+  } catch {
+    // Not empty or already gone.
+  }
+  e2eDatabaseDir = '';
+}
 
 /**
  * Ports this harness actually claimed for the servers it spawned. Only these are force-released
@@ -189,6 +215,7 @@ process.on('exit', () => {
     if (child.exitCode === null && child.signalCode === null) signalProcessGroup(child.pid, 'SIGKILL');
   }
   releaseOwnedPorts();
+  cleanupDatabaseDir();
 });
 
 /**
@@ -200,18 +227,31 @@ process.on('exit', () => {
  */
 async function ensureBackend() {
   if (await isReachable(`${BACKEND_URL}/health`)) {
-    if (process.env.TEST_FIXTURE_TOKEN) {
-      console.log('[harness] Reusing the already-running backend with TEST_FIXTURE_TOKEN from the environment.\n');
+    // F-44: a pre-existing listener is not necessarily a throwaway one. If the operator's
+    // development backend is running, it is bound to the DEVELOPER database, and this suite
+    // drives a complete order lifecycle (payment_pending -> paid -> download authorisation).
+    // Reusing it would write those transitions into real data, so reuse is opt-in and explicit.
+    if (process.env.VERRO_ALLOW_EXTERNAL_BACKEND === '1') {
+      console.log('[harness] Reusing the already-running backend (VERRO_ALLOW_EXTERNAL_BACKEND=1).\n');
       return;
     }
     throw new Error(
-      `A backend is already listening on ${BACKEND_URL}. The fixture route is token-guarded, so a ` +
-        `pre-existing process cannot be reused unless its TEST_FIXTURE_TOKEN is exported to this ` +
-        `harness. Stop it (or export TEST_FIXTURE_TOKEN) and re-run the suite.`
+      `A backend is already listening on ${BACKEND_URL}. This suite creates and settles orders, ` +
+        `so reusing a process it did not start risks writing those transitions into the developer ` +
+        `database. Stop it and re-run, or set VERRO_ALLOW_EXTERNAL_BACKEND=1 if that backend is ` +
+        `known to be throwaway.`
     );
   }
 
-  const databasePath = path.join(BACKEND_DIR, 'verro_commerce.e2e.sqlite');
+  // F-44: a per-run temporary directory OUTSIDE the repository. The old path lived in `backend/`,
+  // so concurrent or leftover runs could collide on it and any data it produced stayed inside the
+  // working tree. `mkdtempSync` gives each run a directory nobody else holds.
+  const databaseDir =
+    process.env.VERRO_TEST_DB_DIR?.trim() || fs.mkdtempSync(path.join(os.tmpdir(), 'verro-e2e-'));
+  fs.mkdirSync(databaseDir, { recursive: true });
+  process.env.VERRO_TEST_DB_DIR = databaseDir;
+  e2eDatabaseDir = databaseDir;
+  const databasePath = path.join(databaseDir, 'verro_commerce.e2e.sqlite');
   for (const suffix of ['', '-wal', '-shm']) {
     fs.rmSync(`${databasePath}${suffix}`, { force: true });
   }
@@ -242,7 +282,19 @@ async function ensureBackend() {
 async function ensureStorefront() {
   if (await isReachable(STOREFRONT_URL)) return;
 
-  spawnChild('npx', ['-y', 'serve', '.', '-l', '4173'], {
+  // Supply chain: `serve` is an EXACT-pinned devDependency (14.2.6) invoked from the local
+  // install. The previous `npx -y serve` downloaded and executed whatever version the registry
+  // served at run time. A missing local binary is a hard failure, never a silent download.
+  const serveBin = path.join(ROOT_DIR, 'node_modules', '.bin', 'serve');
+  if (!fs.existsSync(serveBin)) {
+    throw new Error(
+      `Pinned storefront server not found at ${serveBin}. Run 'npm ci' at ${ROOT_DIR}; this ` +
+        `harness deliberately does not download packages at test time.`
+    );
+  }
+
+  // Loopback-only bind: the storefront must never be reachable from the LAN (F-44 hardening).
+  spawnChild(serveBin, ['.', '-l', 'tcp://127.0.0.1:4173'], {
     cwd: ROOT_DIR,
     label: 'storefront',
     env: process.env
@@ -272,7 +324,17 @@ async function postSignedWebhook(payload) {
 
 let passedCount = 0;
 let failedCount = 0;
+/** Every failure, so the summary lists all of them instead of only the first (F-44). */
+const failures = [];
 
+/**
+ * Step runner.
+ *
+ * F-44 (suite half): a failing step used to rethrow, which unwound the whole suite at the FIRST
+ * failure and printed one line. A regression that broke every later step therefore still looked
+ * like a single assertion failure, and the remaining coverage was silently skipped. Failures are
+ * now collected, every remaining step still runs, and the suite exits non-zero at the end.
+ */
 async function test(stepNumber, description, fn) {
   try {
     await fn();
@@ -282,7 +344,7 @@ async function test(stepNumber, description, fn) {
     console.error(`✗ FAIL [Step ${stepNumber}]: ${description}`);
     console.error(`  Error: ${err.message}`);
     failedCount++;
-    throw err;
+    failures.push(`[Step ${stepNumber}] ${description} — ${err.message}`);
   }
 }
 
@@ -666,7 +728,8 @@ async function runE2ESuite() {
       eventId: 'bad event id',
       orderId: 'ord_verro_any',
       status: 'paid',
-      amount: 39900,
+      paymentReference: `utr_e2e_malformed_${Date.now()}`,
+      amountPaise: 39900,
       currency: 'INR'
     });
 
@@ -681,11 +744,105 @@ async function runE2ESuite() {
       eventId: `evt_e2e_unknown_${Date.now()}`,
       orderId: `ord_verro_unknown_${Date.now()}`,
       status: 'paid',
-      amount: 39900,
+      paymentReference: `utr_e2e_unknown_${Date.now()}`,
+      amountPaise: 39900,
       currency: 'INR'
     });
 
     assert.equal(res.status, 404, 'Unknown-order settlements must fail loudly instead of being silently acknowledged');
+  });
+
+  // Security Test 11: A used download link must not be replayable (F-41)
+  await test('SEC-11', 'A consumed download link is refused and re-issuable (F-41)', async () => {
+    // `downloadUrl` was already streamed once in Step 14, so this is a genuine replay.
+    const replay = await fetch(`${BACKEND_URL}${downloadUrl}`);
+    assert.equal(replay.status, 410, 'A replayed download link must be refused with 410 Gone');
+    const replayBody = await replay.json();
+    assert.match(replayBody.error, /already been used|fresh download link/);
+
+    // Denial-of-sale guard: the customer can still obtain a NEW link.
+    const reauth = await fetch(`${BACKEND_URL}/api/v1/orders/${createdOrderId}/download`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${customerAccessToken}` }
+    });
+    assert.equal(reauth.status, 200, 'A fresh authorization must still be issued');
+
+    const freshUrl = (await reauth.json()).downloadUrl;
+    const fresh = await fetch(`${BACKEND_URL}${freshUrl}`);
+    assert.equal(fresh.status, 200, 'The freshly minted link must stream the master archive');
+    assert.equal(fresh.headers.get('content-type'), 'application/zip');
+  });
+
+  // Security Test 12: An interrupted purchase resumes after a refresh (refresh-safety)
+  //
+  // Runs BEFORE the settlement step below, because a confirmed settlement legitimately clears
+  // the persisted in-flight purchase.
+  await test('SEC-12', 'An interrupted purchase survives a refresh without minting a second order', async () => {
+    let createRequestsAfterReload = 0;
+    page.on('request', req => {
+      if (req.url().includes('/api/v1/orders/create') && req.method() === 'POST') {
+        createRequestsAfterReload++;
+      }
+    });
+
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(500);
+
+    const restored = await page.evaluate((orderId) => {
+      const raw = window.sessionStorage.getItem('verro_active_purchase');
+      const parsed = raw ? JSON.parse(raw) : null;
+      return {
+        stored: parsed,
+        orderId: parsed ? parsed.orderId : null,
+        token: window.purchaseService.getPurchaserToken(orderId)
+      };
+    }, createdOrderId);
+
+    assert.ok(restored.stored, 'The in-flight purchase must be persisted for refresh recovery');
+    assert.equal(restored.orderId, createdOrderId, 'The SAME order must be resumed, not a new one');
+    assert.equal(restored.token, customerAccessToken, 'The resumed session must still hold the purchaser credential');
+    assert.equal(createRequestsAfterReload, 0, 'A refresh must never mint a duplicate order');
+  });
+
+  // Security Test 13: Storefront settlement carries the purchaser credential (F-03)
+  await test('SEC-13', 'Storefront settlement sends the purchaser bearer token to /verify (F-03)', async () => {
+    let capturedVerifyRequest = null;
+
+    page.on('request', req => {
+      if (req.url().includes('/verify') && req.method() === 'POST') {
+        capturedVerifyRequest = { headers: req.headers(), postData: req.postDataJSON() };
+      }
+    });
+
+    const settlement = await page.evaluate(async (orderId) => {
+      const service = window.purchaseService;
+      // After the refresh above this is a cold page: the credential must come back from the
+      // persisted purchase, not from in-memory state.
+      const token = service.getPurchaserToken(orderId);
+      const result = await service.verifyAndSettleOrder(orderId, 'utr_e2e_storefront_check');
+      return { orderId, token, result };
+    }, createdOrderId);
+
+    await page.waitForTimeout(500);
+
+    assert.equal(settlement.token, customerAccessToken, 'A cold page must recover the purchaser credential from the persisted purchase');
+    assert.ok(capturedVerifyRequest, 'The storefront must call POST /verify for settlement');
+    assert.equal(
+      capturedVerifyRequest.headers['authorization'],
+      `Bearer ${customerAccessToken}`,
+      'Settlement must be purchaser-scoped, never anonymous (F-03)'
+    );
+
+    // Same order, forged credential: refused identically to a missing one (no oracle).
+    const forged = await fetch(`${BACKEND_URL}/api/v1/orders/${createdOrderId}/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer cst_e2e_forged_${Date.now()}` },
+      body: JSON.stringify({ paymentReference: `utr_e2e_forged_${Date.now()}` })
+    });
+    assert.ok([401, 403].includes(forged.status), `A forged purchaser token must be refused (got ${forged.status})`);
+    const forgedBody = await forged.json();
+    assert.equal(forgedBody.settled, undefined, 'A refused reconciliation must not reveal settlement state');
+    assert.equal(forgedBody.paymentReference, undefined, 'A refused reconciliation must not leak the payment reference');
   });
 
   await page.close();
@@ -693,6 +850,13 @@ async function runE2ESuite() {
 
   console.log('\n==================================================');
   console.log(`E2E COMMERCE RESULTS: ${passedCount} passed, ${failedCount} failed`);
+  if (failures.length > 0) {
+    console.log('--------------------------------------------------');
+    console.log(`FAILURES (${failures.length}) — every failing step, not just the first:`);
+    for (const failure of failures) {
+      console.log(`  ✗ ${failure}`);
+    }
+  }
   console.log('==================================================\n');
 
   // Deterministic teardown: the child stdout/stderr pipes hold the event loop open, so the

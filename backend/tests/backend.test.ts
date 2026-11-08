@@ -298,7 +298,7 @@ async function runTests() {
       orderId: newOrderId,
       status: 'paid',
       paymentReference: 'pay_ref_webhook_01',
-      amount: 39900,
+      amountPaise: 39900,
       currency: 'INR'
     };
     const { raw, signature } = signWebhookPayload(payload);
@@ -673,7 +673,16 @@ async function runTests() {
     const sharedEventId = `evt_shared_${Date.now()}`;
 
     const deliver = (eventId: string, orderId: string) => {
-      const signed = signWebhookPayload({ eventId, orderId, status: 'paid', amount: 39900, currency: 'INR' });
+      // Hardened contract: paise are stated explicitly (`amountPaise`) and a paid event must
+      // name the payment it asserts, so the parser never has to guess either one.
+      const signed = signWebhookPayload({
+        eventId,
+        orderId,
+        status: 'paid',
+        paymentReference: `utr_${Date.now()}`,
+        amountPaise: 39900,
+        currency: 'INR'
+      });
       return request(app)
         .post('/api/v1/webhooks/payment')
         .set('Content-Type', 'application/json')
@@ -744,7 +753,8 @@ async function runTests() {
       eventId,
       orderId: unknownOrderId,
       status: 'paid',
-      amount: 39900,
+      paymentReference: `utr_unknown_${Date.now()}`,
+      amountPaise: 39900,
       currency: 'INR'
     });
 
@@ -771,7 +781,7 @@ async function runTests() {
     assert.equal(orderRepository.updateStatus(orderId, 'paid', 'ref_settled', new Date().toISOString()), true);
 
     const eventId = `evt_late_fail_${Date.now()}`;
-    const signed = signWebhookPayload({ eventId, orderId, status: 'failed', amount: 39900, currency: 'INR' });
+    const signed = signWebhookPayload({ eventId, orderId, status: 'failed', amountPaise: 39900, currency: 'INR' });
     const res = await request(app)
       .post('/api/v1/webhooks/payment')
       .set('Content-Type', 'application/json')
@@ -874,7 +884,14 @@ async function runTests() {
   await test('31. Concurrent duplicate webhook deliveries settle exactly once (concurrency)', async () => {
     const orderId = seedOrder();
     const eventId = `evt_concurrent_${Date.now()}`;
-    const signed = signWebhookPayload({ eventId, orderId, status: 'paid', amount: 39900, currency: 'INR' });
+    const signed = signWebhookPayload({
+      eventId,
+      orderId,
+      status: 'paid',
+      paymentReference: `utr_concurrent_${Date.now()}`,
+      amountPaise: 39900,
+      currency: 'INR'
+    });
 
     const deliver = () =>
       request(app)

@@ -27,10 +27,86 @@ export interface YouPiAdapterConfig {
   apiUrl: string;
   portalUrl: string;
   merchantId?: string;
-  payeeVpa?: string;
+  /**
+   * F-46/F-48: REQUIRED. The adapter no longer invents a payee: it used to fall back to a
+   * hardcoded developer VPA, which meant a production deployment missing
+   * PAYMENT_GATEWAY_MERCHANT_VPA still produced valid, scannable payment intents pointing at the
+   * wrong person.
+   */
+  payeeVpa: string;
+  /** F-46/F-48: REQUIRED. Payee display name published in the UPI intent. */
+  payeeName: string;
+  /** Inbound webhook signing key (HMAC-SHA256 over the raw request bytes). */
   webhookSecret: string;
+  /**
+   * F-32: outbound merchant credential, deliberately separate from `webhookSecret`.
+   * Never send the inbound signing key on an outbound request.
+   */
+  merchantKey?: string;
   returnUrl?: string;
   timeoutMs?: number;
+}
+
+/**
+ * Deterministically convert a gateway amount into integer paise (F-24).
+ *
+ * `amountPaise` is authoritative when present. `amount` is ALWAYS a decimal currency
+ * amount (the YouPI-PG contract sends "399.00"), never an ambiguous bare integer — the
+ * previous implementation guessed with `amount > 1000 ? amount : amount * 100`, which read
+ * "500" as 500 paise but "1500" as 1500 paise instead of 150000. The same payload shape was
+ * therefore misread by 100x in one direction or the other, and the guess decided whether a
+ * settlement was accepted.
+ *
+ * Anything unparseable, non-positive or over-precise returns null so every caller fails
+ * closed instead of settling on a guessed number.
+ */
+export function toAmountPaise(explicitPaise: unknown, decimalAmount: unknown): number | null {
+  if (typeof explicitPaise === 'number' && Number.isInteger(explicitPaise) && explicitPaise > 0) {
+    return explicitPaise;
+  }
+  if (typeof explicitPaise === 'string' && /^\d+$/.test(explicitPaise.trim())) {
+    const parsed = Number.parseInt(explicitPaise.trim(), 10);
+    if (Number.isSafeInteger(parsed) && parsed > 0) return parsed;
+  }
+
+  if (typeof decimalAmount === 'number' || typeof decimalAmount === 'string') {
+    const raw = String(decimalAmount).replace(/,/g, '').trim();
+    // Up to two decimal places only: "399", "399.00", "399.5" parse; "399.999" does not.
+    if (/^\d+(\.\d{1,2})?$/.test(raw)) {
+      const paise = Math.round(Number.parseFloat(raw) * 100);
+      if (Number.isSafeInteger(paise) && paise > 0) return paise;
+    }
+  }
+
+  return null;
+}
+
+/** Event freshness window for inbound webhook events (F-25). */
+export const WEBHOOK_FRESHNESS_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Map a gateway lifecycle outcome onto the order state machine's vocabulary (F-25). */
+export function mapGatewayEventStatus(raw: string): 'paid' | 'failed' | 'expired' | 'cancelled' | null {
+  switch (raw.toUpperCase()) {
+    case 'SUCCESS':
+    case 'PAID':
+    case 'COMPLETED':
+    case 'CAPTURED':
+      return 'paid';
+    case 'FAILED':
+    case 'FAILURE':
+    case 'DECLINED':
+      return 'failed';
+    case 'EXPIRED':
+    case 'TIMEOUT':
+    case 'TIMED_OUT':
+      return 'expired';
+    case 'CANCELLED':
+    case 'CANCELED':
+    case 'VOIDED':
+      return 'cancelled';
+    default:
+      return null;
+  }
 }
 
 export class YouPiPaymentAdapter implements PaymentGatewayAdapter {
@@ -41,7 +117,9 @@ export class YouPiPaymentAdapter implements PaymentGatewayAdapter {
   private portalUrl: string;
   private merchantId?: string;
   private payeeVpa: string;
+  private payeeName: string;
   private webhookSecret: string;
+  private merchantKey?: string;
   private returnUrl: string;
   private timeoutMs: number;
 
@@ -49,8 +127,10 @@ export class YouPiPaymentAdapter implements PaymentGatewayAdapter {
     this.apiUrl = (config.apiUrl || 'http://localhost:6100').replace(/\/+$/, '');
     this.portalUrl = (config.portalUrl || 'http://localhost:7000').replace(/\/+$/, '');
     this.merchantId = config.merchantId;
-    this.payeeVpa = config.payeeVpa || 'dvs2004@slc';
+    this.payeeVpa = config.payeeVpa;
+    this.payeeName = config.payeeName;
     this.webhookSecret = config.webhookSecret;
+    this.merchantKey = config.merchantKey;
     this.returnUrl = config.returnUrl || 'http://localhost:4173/#order-success';
     this.timeoutMs = config.timeoutMs || 10000;
   }
@@ -103,37 +183,43 @@ export class YouPiPaymentAdapter implements PaymentGatewayAdapter {
         throw new Error(`YouPI Gateway session creation failed [HTTP ${response.status}]: ${errorText}`);
       }
 
-      const data = (await response.json()) as any;
-      const paymentId = data.paymentId || `youpi_${order.id}`;
-      const checkoutUrl = data.checkoutUrl || `${this.portalUrl}/checkout/${paymentId}`;
+      const data = (await response.json().catch(() => null)) as any;
+
+      // The session identity MUST come from the gateway. Synthesising `youpi_<orderId>`
+      // produced a session that no gateway ever issued, yet it was labelled
+      // mode: 'production' and could be persisted as the order's reconciliation key
+      // (F-20 / F-23).
+      const paymentId =
+        typeof data?.paymentId === 'string' && data.paymentId.trim() ? data.paymentId.trim() : '';
+      if (!paymentId) {
+        throw new Error('YouPI Gateway returned a session without a paymentId.');
+      }
+
+      const checkoutUrl =
+        typeof data?.checkoutUrl === 'string' && data.checkoutUrl.trim()
+          ? data.checkoutUrl.trim()
+          : `${this.portalUrl}/checkout/${encodeURIComponent(paymentId)}`;
       const cleanRef = order.id.replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase();
-      const upiUri = `upi://pay?pa=${encodeURIComponent(this.payeeVpa)}&pn=${encodeURIComponent('Darshan V Sunkanur')}&am=${amountInr}&cu=INR&tn=VERRO${cleanRef}`;
+      const upiUri = `upi://pay?pa=${encodeURIComponent(this.payeeVpa)}&pn=${encodeURIComponent(this.payeeName)}&am=${amountInr}&cu=INR&tn=VERRO${cleanRef}`;
 
       return {
         sessionId: paymentId,
         checkoutUrl,
         upiUri,
         payeeVpa: this.payeeVpa,
+        payeeName: this.payeeName,
         amount: order.amount,
         currency: order.currency,
         mode: 'production'
       };
     } catch (err: any) {
-      console.warn(`[YouPiPaymentAdapter] Payment session initiation notice for ${order.id}: ${err.message}`);
-      // Fallback checkout URL pointing to configured portal if gateway is running behind reverse proxy
-      const fallbackPaymentId = `youpi_${order.id}`;
-      const fallbackCheckoutUrl = `${this.portalUrl}/checkout/${fallbackPaymentId}`;
-      const cleanRef = order.id.replace(/[^a-zA-Z0-9]/g, '').slice(-8).toUpperCase();
-      const fallbackUpiUri = `upi://pay?pa=${encodeURIComponent(this.payeeVpa)}&pn=${encodeURIComponent('Darshan V Sunkanur')}&am=${amountInr}&cu=INR&tn=VERRO${cleanRef}`;
-      return {
-        sessionId: fallbackPaymentId,
-        checkoutUrl: fallbackCheckoutUrl,
-        upiUri: fallbackUpiUri,
-        payeeVpa: this.payeeVpa,
-        amount: order.amount,
-        currency: order.currency,
-        mode: 'production'
-      };
+      // FAIL LOUDLY (F-23). There is deliberately NO fallback session: an unreachable or
+      // misbehaving gateway must surface as an error for that order, never as an invented
+      // payment session that looks production-ready but corresponds to nothing.
+      console.error(
+        `[YouPiPaymentAdapter] Payment session creation FAILED for ${order.id}: ${err.message}`
+      );
+      throw new Error(`Payment session could not be created for order ${order.id}: ${err.message}`);
     }
   }
 
@@ -142,12 +228,22 @@ export class YouPiPaymentAdapter implements PaymentGatewayAdapter {
    * GET /api/v1/payments/:id
    */
   async verifyPayment(orderId: string, paymentReference: string): Promise<PaymentVerificationResult> {
-    const paymentId = paymentReference || orderId;
+    // F-20: query ONLY the server-persisted session id. The previous `paymentReference ||
+    // orderId` fallback meant a caller who merely knew (or guessed) an order id steered the
+    // verification query, probing gateway records that were never issued for that order.
+    const paymentId = typeof paymentReference === 'string' ? paymentReference.trim() : '';
+    if (!paymentId) {
+      console.warn(`[YouPiPaymentAdapter] verifyPayment refused for ${orderId}: no persisted session id.`);
+      return { isPaid: false, amount: 0, currency: 'INR', status: 'pending' };
+    }
+
     const url = `${this.apiUrl}/api/v1/payments/${encodeURIComponent(paymentId)}`;
 
+    // F-32: outbound requests authenticate with the merchant credential — never with the
+    // inbound webhook signing key.
     const headers: Record<string, string> = {};
-    if (this.webhookSecret) {
-      headers['X-Merchant-Key'] = this.webhookSecret;
+    if (this.merchantKey) {
+      headers['X-Merchant-Key'] = this.merchantKey;
     }
 
     try {
@@ -162,51 +258,62 @@ export class YouPiPaymentAdapter implements PaymentGatewayAdapter {
       clearTimeout(timeout);
 
       if (!response.ok) {
+        // A definite "no such payment" is 'unpaid'. Every other failure is UNVERIFIABLE
+        // ('pending') and never 'failed': a transport or 5xx problem must not be allowed to
+        // drive an order's terminal state.
+        const status: PaymentVerificationResult['status'] = response.status === 404 ? 'unpaid' : 'pending';
+        console.warn(`[YouPiPaymentAdapter] verifyPayment ${paymentId} returned HTTP ${response.status} -> ${status}`);
+        return { isPaid: false, amount: 0, currency: 'INR', status };
+      }
+
+      const data = (await response.json().catch(() => null)) as any;
+      const statusRaw = String(data?.status || '').toUpperCase();
+      const amountPaise = toAmountPaise(data?.amountPaise, data?.amount);
+      const currency =
+        typeof data?.currency === 'string' && data.currency.trim()
+          ? data.currency.trim().toUpperCase()
+          : 'INR';
+
+      const mapped = mapGatewayEventStatus(statusRaw);
+      if (mapped !== 'paid') {
+        // 'pending' when the gateway said something we do not recognise (unverifiable).
         return {
           isPaid: false,
-          paymentReference,
-          amount: 0,
-          currency: 'INR',
-          status: 'unpaid'
+          amount: amountPaise ?? 0,
+          currency,
+          status: mapped === null ? 'pending' : mapped
         };
       }
 
-      const data = (await response.json()) as any;
-      const statusRaw = String(data.status || '').toUpperCase();
-      const isPaid = statusRaw === 'SUCCESS' || statusRaw === 'PAID';
-
-      let amountPaise = 0;
-      if (typeof data.amountPaise === 'number') {
-        amountPaise = data.amountPaise;
-      } else if (typeof data.amount === 'string') {
-        amountPaise = Math.round(parseFloat(data.amount) * 100);
-      } else if (typeof data.amount === 'number') {
-        amountPaise = data.amount > 1000 ? data.amount : Math.round(data.amount * 100);
+      // A paid outcome is only usable when it is FULLY identified: an authoritative positive
+      // amount in paise AND a real gateway-issued reference. Anything less is reported as
+      // unverifiable so callers fail closed instead of settling on a guess.
+      const reference = this.extractReference(data);
+      if (amountPaise === null || !reference) {
+        console.warn(
+          `[YouPiPaymentAdapter] verifyPayment ${paymentId}: paid outcome without ${
+            amountPaise === null ? 'an authoritative amount' : 'a gateway reference'
+          }; reporting pending.`
+        );
+        return { isPaid: false, amount: amountPaise ?? 0, currency, status: 'pending' };
       }
 
-      const status: 'paid' | 'unpaid' | 'failed' | 'pending' = isPaid
-        ? 'paid'
-        : statusRaw === 'FAILED' || statusRaw === 'EXPIRED' || statusRaw === 'CANCELLED'
-          ? 'failed'
-          : 'pending';
-
-      return {
-        isPaid,
-        paymentReference: data.paymentId || paymentReference,
-        amount: amountPaise,
-        currency: data.currency || 'INR',
-        status
-      };
+      return { isPaid: true, paymentReference: reference, amount: amountPaise, currency, status: 'paid' };
     } catch (err: any) {
+      // Transient transport failure: UNVERIFIABLE. Never 'failed', never 'paid'.
       console.warn(`[YouPiPaymentAdapter] verifyPayment query failed for ${paymentId}: ${err.message}`);
-      return {
-        isPaid: false,
-        paymentReference,
-        amount: 0,
-        currency: 'INR',
-        status: 'unpaid'
-      };
+      return { isPaid: false, amount: 0, currency: 'INR', status: 'pending' };
     }
+  }
+
+  /** First gateway-issued reference present on a payload, or '' when none exists. */
+  private extractReference(data: any): string {
+    for (const candidate of [data?.utr, data?.paymentReference, data?.paymentId]) {
+      if (typeof candidate === 'string' && candidate.trim() !== '') {
+        return candidate.trim();
+      }
+    }
+    return '';
   }
 
   /**
@@ -292,39 +399,62 @@ export class YouPiPaymentAdapter implements PaymentGatewayAdapter {
       return invalid(eventId, orderId, 'Failed identifier grammar check');
     }
 
-    const eventRaw = String(data.event || data.status || (data.data && (data.data.event || data.data.status)) || '').toUpperCase();
-    const isSuccess = eventRaw === 'SUCCESS' || eventRaw === 'PAID';
+    const eventRaw = String(
+      data.event || data.status || (data.data && (data.data.event || data.data.status)) || ''
+    );
 
-    // Amount extraction (paise)
-    let amount = 0;
-    if (typeof data.amountPaise === 'number' && Number.isInteger(data.amountPaise)) {
-      amount = data.amountPaise;
-    } else if (typeof data.amount === 'number' && Number.isInteger(data.amount)) {
-      amount = data.amount > 1000 ? data.amount : data.amount * 100;
-    } else if (typeof data.amount === 'string') {
-      const parsed = parseFloat(data.amount);
-      if (!Number.isNaN(parsed)) {
-        amount = Math.round(parsed * 100);
-      }
+    // F-25: four DISTINCT outcomes. An unrecognised status is rejected outright rather than
+    // being coerced into 'failed', so a future gateway status can never be silently treated
+    // as a decline (nor, worse, as a settlement).
+    const mappedStatus = mapGatewayEventStatus(eventRaw);
+    if (!mappedStatus) {
+      return invalid(eventId, orderId, `Unmapped gateway event status "${eventRaw}"`);
     }
 
-    const currency = typeof data.currency === 'string' && data.currency.length > 0 ? data.currency : 'INR';
-    const paymentReference =
-      typeof data.utr === 'string' && data.utr.length > 0
-        ? data.utr
-        : (typeof data.paymentId === 'string'
-            ? data.paymentId
-            : (typeof data.paymentReference === 'string' ? data.paymentReference : 'youpi_settlement'));
+    // F-25: bounded freshness. A signed event whose own timestamp is implausibly old or in
+    // the future is refused instead of being replayed indefinitely. An event carrying no
+    // timestamp at all is still accepted, because some gateway deliveries omit it.
+    const rawTimestamp = data.completedAt || data.timestamp || data.createdAt;
+    let timestamp = new Date().toISOString();
+    if (typeof rawTimestamp === 'string' && rawTimestamp.trim() !== '') {
+      const parsedTimestamp = Date.parse(rawTimestamp);
+      if (!Number.isFinite(parsedTimestamp)) {
+        return invalid(eventId, orderId, 'Unparseable event timestamp');
+      }
+      if (Math.abs(Date.now() - parsedTimestamp) > WEBHOOK_FRESHNESS_WINDOW_MS) {
+        return invalid(eventId, orderId, 'Event timestamp outside the accepted freshness window');
+      }
+      timestamp = new Date(parsedTimestamp).toISOString();
+    }
+
+    // Amount extraction (paise) — deterministic, never guessed (F-24).
+    const amountPaise = toAmountPaise(data.amountPaise, data.amount);
+    if (amountPaise === null) {
+      return invalid(eventId, orderId, 'Missing or unparseable event amount');
+    }
+
+    const currency =
+      typeof data.currency === 'string' && data.currency.trim() !== ''
+        ? data.currency.trim().toUpperCase()
+        : 'INR';
+
+    // A PAID event must name the payment it asserts; non-paid outcomes need not carry one.
+    // The previous `'youpi_settlement'` default minted a reference no gateway ever issued,
+    // which then became the order's permanent payment_reference (F-05).
+    const paymentReference = this.extractReference(data);
+    if (mappedStatus === 'paid' && !paymentReference) {
+      return invalid(eventId, orderId, 'Missing gateway payment reference');
+    }
 
     return {
       isValid: true,
       eventId,
       orderId,
-      status: isSuccess ? 'paid' : 'failed',
+      status: mappedStatus,
       paymentReference,
-      amount,
+      amount: amountPaise,
       currency,
-      timestamp: data.completedAt || new Date().toISOString()
+      timestamp
     };
   }
 }

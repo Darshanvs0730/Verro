@@ -1,0 +1,44 @@
+name: security-gate
+
+# The project had no CI at all: every guarantee lived in a developer's shell history. This
+# workflow runs the same hermetic gate that is available locally via `npm run security:gate`.
+#
+# It deliberately does NOT run the browser suites (`tests/e2e-commerce.test.js`,
+# `tests/viewport-test.js`): those need Playwright browsers and two live servers, and they are
+# covered by `npm run security:gate:full` on a machine that has them.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: hermetic security gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install backend dependencies (compiles better-sqlite3)
+        run: npm --prefix backend ci
+
+      - name: Security gate
+        run: npm run security:gate
